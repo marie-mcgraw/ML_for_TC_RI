@@ -111,7 +111,7 @@ def create_SHIPS_predictors_IR(SHIPS_in,PREDICTORS_sel,FORE_use,IR00_time_ind,IR
     pred_sel_IR = pred_sel_IR.set_index(['CASE','TIME'])
     for i_case in case_ind:
         # delete cases where we only have one sample
-        if len(pred_IR.loc[i_case].index) <= 1:
+        if len(pred_IR.loc[i_case].shape) == 1:
             continue
         for i_IR in np.arange(0,len(IR00_var_names)):
             time_inds = pred_sel_IR['IR00'].loc[i_case]
@@ -126,7 +126,7 @@ def create_SHIPS_predictors_IR(SHIPS_in,PREDICTORS_sel,FORE_use,IR00_time_ind,IR
     for j_case in case_ind:
         # delete cases where we only have one sample
         #if j_case in (9567.0,12046.0,12047.0,12048.0,12049.0,13903.0,17008,17621,18277,20802):
-        if len(pred_IR.loc[j_case].index) <= 1:
+        if len(pred_IR.loc[j_case].shape) == 1:
             continue
         for j_IR in np.arange(0,len(PC00_var_names)):
             time_inds = pred_sel_IR['PC00'].loc[j_case]
