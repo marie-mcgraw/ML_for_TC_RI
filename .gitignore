@@ -2,3 +2,4 @@
 *.png
 *.out
 *.pyc
+**/*.ipynb_checkpoints/
