@@ -56,11 +56,10 @@ warnings.simplefilter(action="ignore",category=ConvergenceWarning)
 # * max_fore: maximum forecast hours [usually 24 or 48]
 # * mask_TYPE: how are we handling cases close to land? [SIMPLE_MASK or no_MASK]
 # * interp_str: Did we interpolate over missing data or not? [INTERP: yes, no_INTERP: no]
-# * pred_set:  Set of predictors we used.  Default is 'BASIC' but if we want to change the predictors we are using we can do that.
 # * yr_start:  First year of training data [2010 or 2005, generally]
 # * yr_end_LOAD:  Last year of full data (to find file)[2021]
 # * yr_end_TRAIN: Last year to use in training [2018 is default]
-# * use_basin:  Default is to use all basins, but if we just want to use one basin, we can specify that here [ATLANTIC, EAST_PACIFIC, WEST_PACIFIC, and SOUTH_PACIFIC are the choices]
+# * use_basin:  Default is to use all basins, but if we just want to use one basin, we can specify that here [ATLANTIC, EAST_PACIFIC, WEST_PACIFIC, and SOUTHERN_HEM are the choices]
 
 # In[4]:
 
@@ -75,6 +74,24 @@ use_basin = 'ALL'
 
 
 # #### SHIPS analysis choices
+# * `hrs_max`: maximum forecast hours (usually 24; should be same or less than `max_fore`)
+# * `RI_thresh`: change in wind speed over `hrs_max` needed for RI; default threshold is `30` kt increase in wind speed in `24` hours
+# * `is_RI_only`: flag for future instances of a multi-class classification problem (should always be set to `True` for now)
+# * `n_classes`: related to `is_RI_only`; how many classes are we classifying into (should be `2` for now)
+# * `is_standard`: flag to indicate whether or not we want to do feature scaling with `StandardScaler` (default is `True`)
+# * `DO_AVG`: flag to indicate whether or not we are averaging over our forecast period or treating each 6-hrly forecast as a separate predictor (default is `True`)
+# * `drop_features`: list of features to drop before model training (usually needed for preprocessing but we don't want to train the model on them).  Commonly dropped features include:
+#     * `TYPE`: storm type; should be 1 everywhere (tropical cyclones only)
+#     * `VMAX`: maximum surface winds; we define our classes based entirely on `VMAX` so we don't want it in our features
+#     * `DELV`: we only use `DELV -12` (change in wind speeds from -12 h to 0 h) and not the change in wind speeds relative to 0 for all hours
+#     * `VMPI`: we calculated `POT` (basically `VMPI` - `VMAX_0`) so we don't need to also include `VMPI`
+#     * `is_TRAIN`: just a flag we use to separate training data from validation in our bootstrapped experiments; not an actual feature to train on 
+# * `to_IND`: list of quantities we want to index on for our multi-index (note that these quantities will NOT be considered features)
+#     * `BASIN`: ocean basin
+#     * `CASE`: case number
+#     * `NAME`: name of tropical cyclone
+#     * `DATE_full`: date of case (YYYY-MM-DD-HH:MM:SS).  Time stamp is for `time 0`
+#     * `TIME`: forecast time.  should range from `0` to `max_fore_hrs`
 
 # In[5]:
 
@@ -95,7 +112,7 @@ DO_AVG = True
 
 # ##### Load our pre-processed SHIPS files
 
-# In[8]:
+# In[6]:
 
 
 SHIPS_predictors,BASIN = load_processed_SHIPS(yr_start,yr_end_LOAD,mask_TYPE,max_fore,interp_str,use_basin)
@@ -111,7 +128,7 @@ SHIPS_predictors,BASIN = load_processed_SHIPS(yr_start,yr_end_LOAD,mask_TYPE,max
 # * `C_vals`: $C$ is the model's regularization parameter.  We'll explore different values of $C$ in our hyperparameter sweep.  $C$ is the main hyperparameter that we can use to tune the model
 # * `max_iter`: maximum number of iterations
 
-# In[6]:
+# In[7]:
 
 
 solver = 'saga'
@@ -136,7 +153,7 @@ max_iter = np.logspace(2,4,3) #max iterations
 # 
 # If we want to use custom weights, we can turn on `use_custom_wts` and specify them.  If we don't want to use weights (not a good choice for imbalanced classes but w/e), we can set `no_wts` to `True`.  If both `use_custom_wts` and `no_wts` are `False`, we'll use the default weights (`balanced`). 
 
-# In[ ]:
+# In[8]:
 
 
 # Weights
@@ -155,8 +172,8 @@ if use_custom_wts:
    #  class_wts = SHIPS_preprocess.calculate_class_weights(SHIPS_predictors,n_classes,RI_thresh,0)
     # weights_use = class_wts.xs(use_basin)
    #  wts_sel = weights_use['WEIGHT'].to_dict()
-    wts_sel = np.nan
     wts_str = 'custom_wts'
+    wts_sel = np.nan
 # No weighting
 elif no_wts:
     wts_sel = 0
@@ -171,7 +188,7 @@ else:
 # 
 # First, initialize some dataframes for results
 
-# In[11]:
+# In[10]:
 
 
 predicted_y_ALL = pd.DataFrame()
@@ -193,10 +210,14 @@ report_ALL = pd.DataFrame()
 # ###### Overview
 # 1. Of full training period (2005-2018), we randomly select `n_valid` years to use for validation.  We use a modified leave-one-year-out approach (where instead we leave `n_valid` years out. This step is handled by the `get_train_test_split` function.  Thus we divide our SHIPS predictors as well as our target variable into training and validation samples based on year. 
 # 2. We set up a hyperparameter sweep using `sklearn`'s `gridsearchCV` (contained in `create_gridsearch_LR` function).  For logistic regression, we only have one main hyperparameter--the normalization factor, $C$; we identifed values of $C$ in `C_vals` previously. 
+# 3. After identifying best hyperparameters, we train (`model.fit()`).  We train once on cases from all ocean basins.
+# 4. Once training is complete, we try to predict class of our validation years.  We predict each ocean basin separately, as well as predict all ocean basins combined. We use `get_scores_best_params_LR` to get the hyperparameters for our best model, `get_confusion_matrix_LR` to get the confusion matrix and contingency table stats for our model, `get_feature_importances_LR` to get the feature importances, and `get_roc_AUC` to get the receiver operator curve (ROC) and area under the curve (AUC). 
+# 5. We save all of the output and repeat the process, selecting new validation years and fully re-training every time until we have done `N_samples` experiments. 
 
-# In[12]:
+# In[11]:
 
 
+# Experiment parameters
 N_samples = 15
 ncats = 2
 scoring = 'f1_weighted'
@@ -204,6 +225,7 @@ cut = 'equal'
 FULL_yrs = np.arange(yr_start,yr_end_TRAIN,1)
 n_valid = 3 # number of years to leave out for validation
 
+# Loop through bootstrapping experiments
 for i in np.arange(0,N_samples):
 # i = 0
     print('running sample ',i)
@@ -216,60 +238,61 @@ for i in np.arange(0,N_samples):
     LR_model = SHIPS_ML_model_funcs.create_gridsearch_LR(is_standard,solver,penalty,C_vals,max_iter,k_folds,n_repeats,
                                     use_custom_wts,wts_sel,scoring,no_wts)
 
-    # Fit model using training data.  We only train once, on cases from all 4 basins
+    # Fit model using training data.  We train cases from all 4 basins
     print('fitting model')
     LR_model.fit(X_train,y_train['I_class'])
 
-
-   # 
     BASIN_all = ['ATLANTIC', 'EAST_PACIFIC', 'WEST_PACIFIC', 'SOUTHERN_HEM','ALL']
     print('calculating scores')
     # Now, perform validation.  We'll analyze each basin separately as well as a combined score for all basins. 
     for basin in BASIN_all:
         #basin = 'ATLANTIC'
         print('running ',basin)
+        # Get best hyperparams
         report, y_true, y_pred = SHIPS_ML_model_funcs.get_scores_best_params_LR(LR_model,X_test,y_test,basin)
         report['Years Out'] = str(test_years)
         report['Model'] = solver
         report['Fold'] = i
         label_names = ['not RI','RI']
 
-        #
+        # Get confusion matrix
         cm_stats = SHIPS_ML_model_funcs.get_confusion_matrix_LR(LR_model,y_true,y_pred,basin,label_names,ncats)
         cm_stats['Years Out'] = str(test_years)
         cm_stats['Model'] = solver
         cm_stats['Fold'] = i
-        #
+        # Get feature importances for validation data
         fi_pred = SHIPS_ML_model_funcs.get_feature_importances_LR(LR_model,X_test,y_test,basin,scoring)
         fi_pred['Years Out'] = str(test_years)
         fi_pred['Fold'] = i
         fi_pred['Model'] = solver
-        #
+        # Get feature importances for training data
         fi_pred_train = SHIPS_ML_model_funcs.get_feature_importances_LR(LR_model,X_train,y_train,basin,scoring)
         fi_pred_train['Years Out'] = str(test_years)
         fi_pred_train['Fold'] = i
         fi_pred_train['Model'] = solver
-        #
+        # Get ROC/AUC 
         ypred_prob, p_vs_r, roc_vals = SHIPS_ML_model_funcs.get_roc_auc(X_test,basin,LR_model,y_test,1,'RI',scoring,cut)
 
-        #
+        # Save info like experiment #, years used for validation
         p_vs_r['Fold'] = i
         p_vs_r['Years Out'] = str(test_years)
         p_vs_r['Model'] = solver
         roc_vals['Fold'] = i
         roc_vals['Model'] = solver
         roc_vals['Years Out'] = str(test_years)
-        #
+        # Get our actual predictions for target variable
         if basin != 'ALL':
             y_pred_all = y_test.xs(basin).copy()
         else:
             y_pred_all = y_test.copy()
+        # Save predicted y vals
         y_pred_all['Y pred'] = y_pred
         y_pred_all['Predicted Basin'] = basin
         y_pred_all['Model'] = solver
+        # Get predictions for class = 0 and class = 1
         y_pred_all['Y pred probab (class: 0)'] = ypred_prob[:,0]
         y_pred_all['Y pred probab (class: 1)'] = ypred_prob[:,1]
-        #
+        # Append everything before restarting the loop
         predicted_y_ALL = predicted_y_ALL.append(y_pred_all.reset_index())
         roc_vals_ALL = roc_vals_ALL.append(roc_vals)
         p_vs_r_ALL = p_vs_r_ALL.append(p_vs_r)
@@ -279,46 +302,36 @@ for i in np.arange(0,N_samples):
         report_ALL = report_ALL.append(report)
 
 
-# In[ ]:
+# In[12]:
 
 
-LR_model.predict_proba(X_test)
-
-
-# In[ ]:
-
-
-#predicted_y_ALL = predicted_y_ALL.drop(columns={'BASIN'})
+# For naming purposes
 predicted_y_ALL['BASIN'] = predicted_y_ALL['Predicted Basin']
 
 
-# In[ ]:
+# In[13]:
 
 
+# Quick look at recall, f1, and precision for RI cases. recall is usually highest, f1 in middle, precision lowest
 foo = report_ALL.reset_index().rename(columns={'index':'Score'})
 foo2 = foo.set_index(['Score'])
-# sns.stripplot(data=foo2.xs('recall'),x='BASIN',y='1.0',palette=sns.color_palette('rocket_r'),s=15)
-# sns.stripplot(data=foo2.xs('f1-score'),x='BASIN',y='1.0',palette=sns.color_palette('mako'),s=30,alpha=0.5)
-# sns.stripplot(data=foo2.xs('precision'),x='BASIN',y='1.0',palette=sns.color_palette('Reds'),s=5)
+sns.stripplot(data=foo2.xs('recall'),x='BASIN',y='1.0',palette=sns.color_palette('rocket_r'),s=15)
+sns.stripplot(data=foo2.xs('f1-score'),x='BASIN',y='1.0',palette=sns.color_palette('mako'),s=30,alpha=0.5)
+sns.stripplot(data=foo2.xs('precision'),x='BASIN',y='1.0',palette=sns.color_palette('Reds'),s=5)
 
 
-# In[ ]:
+# In[14]:
 
 
-# foo2#.xs('Recall').groupby(['BASIN']).max()
+# Quick look at recall, f1, and precision for no RI cases. precision is usually highest, f1 in middle, recall lowest
+sns.stripplot(data=foo2.xs('recall'),x='BASIN',y='0.0',palette=sns.color_palette('rocket_r'),s=15)
+sns.stripplot(data=foo2.xs('f1-score'),x='BASIN',y='0.0',palette=sns.color_palette('mako'),s=30,alpha=0.5)
+sns.stripplot(data=foo2.xs('precision'),x='BASIN',y='0.0',palette=sns.color_palette('Reds'),s=5)
 
 
-# In[ ]:
+# Set up directory and filenames for saving
 
-
-# sns.stripplot(data=foo2.xs('recall'),x='BASIN',y='0.0',palette=sns.color_palette('rocket_r'),s=15)
-# sns.stripplot(data=foo2.xs('f1-score'),x='BASIN',y='0.0',palette=sns.color_palette('mako'),s=30,alpha=0.5)
-# sns.stripplot(data=foo2.xs('precision'),x='BASIN',y='0.0',palette=sns.color_palette('Reds'),s=5)
-
-
-# Get directory and filenames for saving
-
-# In[ ]:
+# In[15]:
 
 
 save_dir = 'DATA/ML_model_results/TRAINING/'
@@ -330,13 +343,21 @@ save_ext_figs = 'TRAIN_{solver}_SHIPS_SIMPLE_RI_vs_no_RI_{yr_start}-{yr_end}_{ma
                            stand_str=stand_str,RI_thresh=RI_thresh,wts_str=wts_str,N=N_samples,scoring=scoring)
 
 
-# In[ ]:
+# ##### Create subdirectories if they don't exist
+
+# In[16]:
 
 
+if not os.path.exists(save_dir):
+    os.makedirs(save_dir)
+# figs directory
+if not os.path.exists(save_dir+'/figs/'):
+    os.makedirs(save_dir+'/figs/')
 
 
+# Actually save everything
 
-# In[ ]:
+# In[17]:
 
 
 predicted_y_ALL.to_csv(save_dir+'PREDICTED_Y_vals'+save_extension)
@@ -352,7 +373,7 @@ report_ALL.to_csv(save_dir+'Class_Report'+save_extension)
 
 # ###### Precision vs Recall plots
 
-# In[ ]:
+# In[18]:
 
 
 p_vs_r_ALL_plt = p_vs_r_ALL.reset_index()#.iloc[::2]
@@ -388,7 +409,10 @@ for basin_sel in BASIN_all:
 plt.close('all')
 
 
-# In[ ]:
+# ###### AUC scores for each bootstrapped experiment
+# Box plot with AUC score for each basin shown on one plot
+
+# In[19]:
 
 
 fig3,ax3 = plt.subplots(1,1,figsize=(10,6))
@@ -401,7 +425,11 @@ fig3.savefig(save_dir+'figs/AUC_scores_all_basins_{solver}'.format(solver=solver
             format='png',dpi=250,bbox_inches='tight')
 plt.close('all')
 
-# In[ ]:
+
+# ###### ROC curve for each basin
+# ROC curve for each basin, with AUC score indicated by shading
+
+# In[20]:
 
 
 for basin_sel in BASIN_all:
@@ -429,13 +457,10 @@ for basin_sel in BASIN_all:
                  dpi=250,bbox_inches='tight')
 plt.close('all')
 
-# In[ ]:
 
+# ##### Recall, precision, f1 score, and support
 
-
-
-
-# In[ ]:
+# In[21]:
 
 
 report_plot = report_ALL.reset_index().rename(columns={'index':'Scores','0.0':'not RI','1.0':'RI'})
@@ -456,10 +481,10 @@ for score_sel in score_sel_ALL:
     ax4.set_title(' {score_sel}, Classifying RI Cases'.format(score_sel=score_sel),fontsize=20)
     fig4.savefig(save_dir+'figs/{score_sel}_all_samples_RI_cases'.format(score_sel=score_sel)+save_ext_figs,
                 format='png',dpi=250,bbox_inches='tight')
-    
-plt.close('all')
+plt.close('all')   
 
-# In[ ]:
+
+# In[22]:
 
 
 report_plt2 = report_plt_all.loc[['precision','recall','f1-score']].mean(level=(0,1)).reset_index()
@@ -486,9 +511,12 @@ fig5.suptitle('Precision, Recall, and F1 Scores, Averaged Over Bootstrapped Samp
 fig5.tight_layout()
 fig5.savefig(save_dir+'figs/Scores_averaged_RI_non_RI'+save_ext_figs,
             format='png',dpi=250,bbox_inches='tight')
-
 plt.close('all')
-# In[ ]:
+
+
+# ##### Contingency table metrics
+
+# In[23]:
 
 
 #sns.heatmap(data=cm_ALL,x='Category',y='Misses')
@@ -529,15 +557,12 @@ fig6.suptitle('{solver} Model'.format(solver=solver),fontsize=21)
 fig6.tight_layout()
 fig6.savefig(save_dir+'figs/CM_results_RI_not_RI'+save_ext_figs,
             format='png',dpi=250,bbox_inches='tight')
-
 plt.close('all')
-# In[ ]:
 
 
-# fi_plt_plt
+# ##### Feature importances (each validation sample)
 
-
-# In[ ]:
+# In[24]:
 
 
 fig7,ax7 = plt.subplots(1,1,figsize=(15,10))
@@ -557,11 +582,12 @@ ax7.set_title('Feature Importances, not-RI vs RI, {solver}'.format(solver=solver
 fig7.tight_layout()
 fig7.savefig(save_dir+'figs/Feat_Imp_RI_not_RI'+save_ext_figs,
             format='png',dpi=250,bbox_inches='tight')
-
 plt.close('all')
-# #### Each basin separately
 
-# In[ ]:
+
+# #### FI for each basin separately
+
+# In[25]:
 
 
 for basin_sel in BASIN_all:
@@ -584,9 +610,12 @@ for basin_sel in BASIN_all:
     fig7.tight_layout()
     fig7.savefig(save_dir+'figs/Feat_Imp_RI_not_RI_{basin_sel}'.format(basin_sel=basin_sel)+save_ext_figs,
                 format='png',dpi=250,bbox_inches='tight')
-
 plt.close('all')
-# In[ ]:
+
+
+# ##### Feature importances (each training sample)
+
+# In[26]:
 
 
 fig7,ax7 = plt.subplots(1,1,figsize=(15,10))
@@ -606,11 +635,12 @@ ax7.set_title('Feature Importances, TRAINING DATA, not-RI vs RI, {solver}'.forma
 fig7.tight_layout()
 fig7.savefig(save_dir+'figs/Feat_Imp_TRAIN_RI_not_RI'+save_ext_figs,
             format='png',dpi=250,bbox_inches='tight')
-
 plt.close('all')
-# #### Each basin separately
 
-# In[ ]:
+
+# ##### Feature importances (training sample) each basin separately
+
+# In[27]:
 
 
 for basin_sel in BASIN_all:
@@ -633,13 +663,7 @@ for basin_sel in BASIN_all:
     fig7.tight_layout()
     fig7.savefig(save_dir+'figs/Feat_Imp_RI_not_RI_TRAINING_{basin_sel}'.format(basin_sel=basin_sel)+save_ext_figs,
                 format='png',dpi=250,bbox_inches='tight')
-
 plt.close('all')
-# In[ ]:
-
-
-fi_pred_ALL.reset_index().sort_values('mean importance',ascending=False).head(20)
-cm_ALL.groupby(['Category Names','BASIN','C']).count()
 
 
 # ##### What do we need for a performance diagram?
@@ -652,16 +676,12 @@ cm_ALL.groupby(['Category Names','BASIN','C']).count()
 # 1. X/Y axis is in POD / Success ratio space
 # 2. Then we have dashed lines showing bias scores, and solid contours labeling CSI 
 
-# In[ ]:
+# In[28]:
 
 
-
-
-
-# In[ ]:
-
-
+# Performance diagram
 fig12,ax12 = plt.subplots(1,1,figsize=(12,8))
+# Make background lines
 SHIPS_plotting.make_performance_diagram_background(ax12)
 
 #ax12.errorbar(cm_ALL_PD_sel.reset_index()['SR'],cm_ALL_PD_sel.reset_index()['POD'],yerr=cm_ALL_yerr,xerr=cm_ALL_xerr,
@@ -669,22 +689,24 @@ SHIPS_plotting.make_performance_diagram_background(ax12)
 #sns.scatterplot(data=cm_ALL_PD_sel.reset_index(),x='SR',y='POD',hue='BASIN',ax=ax12,palette=sns.set_palette(pal_sel),
   #              s=180,zorder=10)
 ax12.set_title('Classifying RI Cases, {solver}'.format(solver=solver),fontsize=22)
+# Add data
 SHIPS_plotting.add_model_results(ax12,cm_ALL)
 fig12.savefig(save_dir+'figs/Performance_Diagram'+save_ext_figs,
             format='png',dpi=250,bbox_inches='tight')
-
 plt.close('all')
+
+
 # #### Performance Diagram curves: PoD vs Success Ratio
 # 
-# 1. PoD vs Success Ratio curves.  Each fold shown separately, and then averaged across all folds.  Each basin will be separate.
-# 2. AUPD (area under performance diagram) scores. Calculated for each fold and shown as a swarm or box plot, all basins on one plot
-# 3. Max CSI. Calculated for each fold / basin and shown as swarm or box plot, all basins on one plot. 
-# 4. CSI vs Bias.  Calculated for each fold / basin and shown as scatterplot, all basins on one plot. Also show mean across all folds. 
-# 
+# 1. Max CSI. Calculated for each fold / basin and shown as swarm or box plot, all basins on one plot. 
+# 2. CSI vs Bias.  Calculated for each fold / basin and shown as scatterplot, all basins on one plot. Also show mean across all folds. 
+# 3. AUPD (area under performance diagram) scores. Calculated for each fold and shown as a swarm or box plot, all basins on one plot
+# 4. PoD vs Success Ratio curves.  Each fold shown separately, and then averaged across all folds.  Each basin will be separate. Shown on performance diagram.
 
-# In[ ]:
+# In[29]:
 
 
+# First we'll get the max CSI for each PD curve
 pd_curves = SHIPS_ML_model_funcs.calculate_PD_curves(p_vs_r_ALL)
 fig15,ax15 = plt.subplots(1,1,figsize=(10,6))
 max_CSI_ind = p_vs_r_ALL.groupby(['BASIN','Fold'])[['CSI','Bias']].agg({'CSI':'max'}).reset_index()
@@ -694,29 +716,24 @@ ax15.set_ylabel('Maximum CSI Score',fontsize=16)
 ax15.set_ylim([0,0.6])
 fig15.savefig(save_dir+'figs/Max_CSI_RI_vs_basin'+save_ext_figs,
             format='png',dpi=250,bbox_inches='tight')
-
 plt.close('all')
-# In[ ]:
 
 
-#sns.swarmplot(data=foo2.reset_index(),x='BASIN',y='CSI')
+# In[30]:
+
+
+# Next calculate frequency bias at max CSI for each experiment
 fig30,ax30 = plt.subplots(1,1,figsize=(10,6))
 SHIPS_plotting.plot_CSI_vs_bias(p_vs_r_ALL,ax30)
 ax30.set_title('Bias at Maximum CSI for RI cases, {solver}'.format(solver=solver),fontsize=21)
 fig30.savefig(save_dir+'figs/CSI_vs_bias_RI'+save_ext_figs,
             format='png',dpi=250,bbox_inches='tight')
-
 plt.close('all')
-# In[ ]:
-
-
-b_c_max = p_vs_r_ALL.sort_values(['CSI'], ascending=[False]).groupby(['BASIN','Model','Fold']).first()
-sns.scatterplot(data=b_c_max.reset_index(),x='Bias',y='CSI',hue='BASIN',style='Model',alpha=0.4,legend=False)
 
 
 # ##### Area under PD Curve
 
-# In[ ]:
+# In[31]:
 
 
 aupd_scores = SHIPS_ML_model_funcs.calc_AUPD(p_vs_r_ALL)
@@ -728,16 +745,19 @@ ax14.set_title('Area Under Performance Diagram, RI Cases, {solver}'.format(solve
 ax14.set_ylim([0,0.55])
 fig14.savefig(save_dir+'figs/AUPD_calculation_RI_cases'+save_ext_figs,
             format='png',dpi=250,bbox_inches='tight')
-
 plt.close('all')
-# In[ ]:
+
+
+# In[32]:
 
 
 import warnings
 warnings.filterwarnings("ignore")
 
 
-# In[ ]:
+# ###### Finally get the PD curves (success ratio vs FAR) for each experiment.  Each basin separate.  Show each experiment and highlight experiments with smallest, median, and largest max CSI values. 
+
+# In[33]:
 
 
 for basin_sel in BASIN_all:
@@ -748,8 +768,9 @@ for basin_sel in BASIN_all:
     f23_save = save_dir+'figs/Performance_Diagram_CURVES_{basin_sel}'.format(basin_sel=basin_sel)
     fig23.savefig(f23_save+save_ext_figs,
                 format='png',dpi=250,bbox_inches='tight')
-
 plt.close('all')
+
+
 # In[ ]:
 
 
