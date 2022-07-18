@@ -55,7 +55,7 @@ def SHIPS_train_test_split(SHIPS,TEST_years,use_years=True):
 ## Outputs:
 ## diff:  Our input Pandas dataframe, but with an additional column that includes information about the storm intensity class (['I_class'])
 ##
-def SHIPS_train_test_shuffle_CLASS(SHIPS_predictors,test_years,to_predict,is_RI_only,to_IND,to_DROP,DO_AVG,n_classes,RI_thresh=30,hrs_max=24):
+def SHIPS_train_test_shuffle_CLASS(SHIPS_predictors,test_years,to_predict,is_RI_only,to_IND,to_DROP,DO_AVG,n_classes,RI_thresh,hrs_max=24):
     SHIPS_train,SHIPS_test = SHIPS_train_test_split(SHIPS_predictors,test_years,True)
     # Select desired hours for predictions
     SHIPS_train = SHIPS_train[SHIPS_train['TIME'].isin(np.arange(0,hrs_max+1))]
@@ -66,13 +66,13 @@ def SHIPS_train_test_shuffle_CLASS(SHIPS_predictors,test_years,to_predict,is_RI_
     # Are we predicting <code>VMAX</code> or the change in <code>VMAX</code>? 
     #if to_predict == 'd_VMAX':
     diff_train = calc_d24_VMAX(SHIPS_train,0)
-    diff_train = get_RI_classes(diff_train,is_RI_only,n_classes,RI_thresh)
+    diff_train = get_RI_classes(diff_train,is_RI_only,RI_thresh)
     diff_train = diff_train.rename(columns={'VMAX':'d24_VMAX'})
     predict_train = diff_train[[to_predict]]
     diff_train = diff_train.drop(columns={to_predict})
     #
     diff_test = calc_d24_VMAX(SHIPS_test,0)
-    diff_test = get_RI_classes(diff_test,is_RI_only,n_classes,RI_thresh)
+    diff_test = get_RI_classes(diff_test,is_RI_only,RI_thresh)
     diff_test = diff_test.rename(columns={'VMAX':'d24_VMAX'})
     predict_test = diff_test[[to_predict]]
     diff_test = diff_test.drop(columns={to_predict})

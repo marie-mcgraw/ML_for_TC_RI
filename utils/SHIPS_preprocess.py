@@ -175,7 +175,7 @@ def calc_d24_VMAX(SHIPS,init_HR):
 ##     diff: dataframe containing 24-hour change in SHIPS predictors with added flag for STORM_class
 
 # 
-def get_RI_classes(diff,RI_only=False,RI_thresh=30):
+def get_RI_classes(diff,RI_only,RI_thresh):
     # if RI_only = True, differentiate only between RI and everything else. Otherwise use all categories
     if RI_only == True:
         diff['STORM_class'] = [1 if x >= RI_thresh else 0 for x in diff['VMAX']]
