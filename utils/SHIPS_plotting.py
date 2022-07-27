@@ -254,27 +254,27 @@ def add_model_results(ax,CM,cat_sel='RI'):
     CM_max = CM.groupby(['Category Names','BASIN','Model']).quantile(0.975)
     CM_ALL_sel = CM_mean.loc[cat_sel]
     # Get error bar bounds
-    y_lower = -1*CM_min.loc[cat_sel]['POD'].reset_index().sort_values('BASIN',ignore_index=True) + CM_ALL_sel['POD'].reset_index().sort_values('BASIN',ignore_index=True)
-    y_upper = CM_max.loc[cat_sel]['POD'].reset_index().sort_values('BASIN',ignore_index=True) + -1*CM_ALL_sel['POD'].reset_index().sort_values('BASIN',ignore_index=True)
-    #cm_ALL_yerr = [y_lower.values,y_upper.values]
-    cm_ALL_yerr = [y_lower['POD'],y_upper['POD']]
-    #
-    x_lower = -1*CM_min.loc[cat_sel]['SR'].reset_index().sort_values('BASIN',ignore_index=True) + CM_ALL_sel['SR'].reset_index().sort_values('BASIN',ignore_index=True)
-    x_upper = CM_max.loc[cat_sel]['SR'].reset_index().sort_values('BASIN',ignore_index=True) + -1*CM_ALL_sel['SR'].reset_index().sort_values('BASIN',ignore_index=True)
-
-    cm_ALL_xerr = [x_lower['SR'],x_upper['SR']]
+    CM_mean_sort = CM_ALL_sel.reset_index().sort_values(['BASIN','Model'],ignore_index=True)
+    CM_min_sort = CM_min.loc[cat_sel].reset_index().sort_values(['BASIN','Model'],ignore_index=True)
+    CM_max_sort = CM_max.loc[cat_sel].reset_index().sort_values(['BASIN','Model'],ignore_index=True)
+    y_lower = CM_mean_sort['POD'] - CM_min_sort['POD']
+    # y_lower = CM_min_sort['POD']
+    y_upper = CM_max_sort['POD'] - CM_mean_sort['POD']
+    # y_upper = CM_max_sort['POD']
+    x_lower = CM_mean_sort['SR'] - CM_min_sort['SR']
+    x_upper = CM_max_sort['SR'] - CM_mean_sort['SR']
     # Make a colormap for each basin
     colors_list = ['hot pink','navy','goldenrod','green','violet']
     pal_sel = sns.color_palette(sns.xkcd_palette(colors_list),5)
     # Plot error bars in both x and y
-    ax.errorbar(CM_ALL_sel.reset_index().sort_values('BASIN',ignore_index=True)['SR'],
-                CM_ALL_sel.reset_index().sort_values('BASIN',ignore_index=True)['POD'],
-                yerr=cm_ALL_yerr,xerr=cm_ALL_xerr,
+    ax.errorbar(CM_ALL_sel.reset_index().sort_values(['BASIN','Model'],ignore_index=True)['SR'],
+                CM_ALL_sel.reset_index().sort_values(['BASIN','Model'],ignore_index=True)['POD'],
+                yerr=[y_lower,y_upper],xerr=[x_lower,x_upper],
            linestyle='none',linewidth=2,color='xkcd:slate grey',zorder=9)
-    sns.scatterplot(data=CM_ALL_sel.reset_index().sort_values('BASIN',ignore_index=True),
+    sns.scatterplot(data=CM_ALL_sel.reset_index().sort_values(['BASIN','Model'],ignore_index=True),
                   x='SR',y='POD',hue='BASIN',style='Model',ax=ax,
                    palette=sns.set_palette(pal_sel),s=300,alpha=0.8,zorder=10)
-    ax.legend(fontsize=16)
+    ax.legend(fontsize=15)
 # 8.  Plot basic score vs basin.  If we want to see spread in some kind of score value as a function of basin. Options for box plot or swarm plot
 def plot_basic_score_basin(ax,data,y_val,is_swarm=True):
     if is_swarm:

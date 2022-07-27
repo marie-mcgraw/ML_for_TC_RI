@@ -14,12 +14,9 @@ import pandas as pd
 
 ##outputs: predictors_DYN_return is our masked, interpolated (if desired), and trimmed subset of the SHIPS data containing only our desired dynamical predictors
 def create_SHIPS_predictors_dyn(SHIPS_in,PREDICTORS_sel,predictand_name,is_INTERP,FORE_use,calc_POT=True):
-    # Mask missing values (indicated by 9999), and keep only TC cases (TYPE = 1)
-    SHIPS_trim = SHIPS_in.mask(SHIPS_in == 9999)
-    SHIPS_trim = SHIPS_trim.mask(SHIPS_trim['TYPE'] != 1)
-    # 
-    predictors_DYN = SHIPS_trim[PREDICTORS_sel]
-    predictand = SHIPS_trim[['CASE','NAME','DATE_full','TIME',predictand_name]]
+    predictors_DYN = SHIPS_in[PREDICTORS_sel]
+    predictand = SHIPS_in[['CASE','NAME','DATE_full','TIME',predictand_name]]
+    predictand = predictand.mask(predictand == 9999)
     # Calculate POT and replace all DELV with DELV at -12
     predictors_DYN_x = predictors_DYN.set_index(['CASE','TIME'])
     predictors_DYN_x = predictors_DYN_x.mask(predictors_DYN_x == 9999)
@@ -91,50 +88,35 @@ def create_SHIPS_predictors_dyn(SHIPS_in,PREDICTORS_sel,predictand_name,is_INTER
 
 def create_SHIPS_predictors_IR(SHIPS_in,PREDICTORS_sel,FORE_use,IR00_time_ind,IR00_var_names,
                                PC00_time_ind,PC00_var_names):
-    # Mask missing values (indicated by 9999), and keep only TC cases (TYPE = 1)
-    SHIPS_mask = SHIPS_in.mask(SHIPS_in == 9999)
-    SHIPS_mask = SHIPS_mask.mask(SHIPS_mask['TYPE'] != 1)
     # Trim to selected predictors
-    pred_sel_IR = SHIPS_mask[PREDICTORS_sel]
-    
-    #case_ind = pred_sel_IR['CASE'].unique().tolist()
+    pred_sel_IR = SHIPS_in[PREDICTORS_sel]
+    case_ind = pred_sel_IR['CASE'].unique().tolist()
+    # mask NaNs
+    pred_sel_IR = pred_sel_IR.mask(pred_sel_IR == 9999)
     # Now, if IR00 (PC00) is nan, replace with IRM1 (PCM1)
     pred_sel_IR.IR00.fillna(pred_sel_IR.IRM1,inplace=True)
     pred_sel_IR.PC00.fillna(pred_sel_IR.PCM1,inplace=True)
     # If IR00 (PC00) is still NaN, replace with IRM3 (PCM3)
     pred_sel_IR.IR00.fillna(pred_sel_IR.IRM3,inplace=True)
     pred_sel_IR.PC00.fillna(pred_sel_IR.PCM3,inplace=True)
-    case_ind = pred_sel_IR['CASE'].unique().tolist()
     # Select desired variables and fill for each case at all times
     pred_IR = pred_sel_IR[['CASE','NAME','DATE_full','TIME','TYPE']]
     pred_IR = pred_IR.set_index(['CASE'])
     pred_sel_IR = pred_sel_IR.set_index(['CASE','TIME'])
     for i_case in case_ind:
-        # delete cases where we only have one sample
-        if len(pred_IR.loc[i_case].shape) == 1:
-            continue
         for i_IR in np.arange(0,len(IR00_var_names)):
             time_inds = pred_sel_IR['IR00'].loc[i_case]
             if [IR00_time_ind[i_IR]] in (time_inds.index.values):
-                if pred_sel_IR['IR00'].loc[i_case].isnull().values.all() == False:
-                    pred_IR.loc[i_case,IR00_var_names[i_IR]] = pred_sel_IR['IR00'].loc[i_case,IR00_time_ind[i_IR]].values*np.ones(len(pred_IR['TIME'].loc[i_case]))
-                else:
-                    pred_IR.loc[i_case,IR00_var_names[i_IR]] = np.nan
+                pred_IR.loc[i_case,IR00_var_names[i_IR]] = pred_sel_IR['IR00'].loc[i_case,IR00_time_ind[i_IR]]
             else:
                 pred_IR.loc[i_case,IR00_var_names[i_IR]] = np.nan
     # Same for PC variables
     for j_case in case_ind:
-        # delete cases where we only have one sample
-        #if j_case in (9567.0,12046.0,12047.0,12048.0,12049.0,13903.0,17008,17621,18277,20802):
-        if len(pred_IR.loc[j_case].shape) == 1:
-            continue
         for j_IR in np.arange(0,len(PC00_var_names)):
+            #
             time_inds = pred_sel_IR['PC00'].loc[j_case]
             if [PC00_time_ind[j_IR]] in (time_inds.index.values):
-                if pred_sel_IR['PC00'].loc[j_case].isnull().values.all() == False:
-                    pred_IR.loc[j_case,PC00_var_names[j_IR]] = pred_sel_IR['PC00'].loc[j_case,PC00_time_ind[j_IR]].values*np.ones(len(pred_IR['TIME'].loc[j_case]))
-                else:
-                    pred_IR.loc[j_case,PC00_var_names[j_IR]] = np.nan
+                pred_IR.loc[j_case,PC00_var_names[j_IR]] = pred_sel_IR['PC00'].loc[j_case,PC00_time_ind[j_IR]]
             else:
                 pred_IR.loc[j_case,PC00_var_names[j_IR]] = np.nan
     # Keep only desired forecast hours
@@ -165,6 +147,25 @@ def calc_d24_VMAX(SHIPS,init_HR):
     diff['DATE_full'] = SHIPS_t0['DATE_full']
     return diff
 #
+# 4.  SHIPS_train_test_split splits SHIPS data into training and testing sets based on either year or storm.  We can't just do a typical train-test split because each CASE is not completely independent (i.e., the same storm's measurements 6 hours apart are different cases but these two cases are not independent from each other). 
+## inputs:
+##     SHIPS: input SHIPS data, in dataframe format
+##     TEST_years: array of years that are included in test set (would use storm names if we split by storms)
+##     use_years: boolean indicating whether or not to split by years or by storm number (default is to split by years)
+## outputs:
+##     SHIPS_train: SHIPS data identified as part of the training set
+##     SHIPS_test: SHIPS data identified as part of the testing set
+
+def SHIPS_train_test_split(SHIPS,TEST_years,use_years=True):
+    if use_years == True:
+        # Add an is_TRAIN flag based on the year of 
+        SHIPS['is_TRAIN'] = [0 if np.isin(x,TEST_years) else 1 for x in pd.to_datetime(SHIPS['DATE_full']).dt.year]
+        SHIPS_train = SHIPS.where(SHIPS['is_TRAIN']==1).dropna(how='all')
+        SHIPS_test = SHIPS.where(SHIPS['is_TRAIN']==0).dropna(how='all')
+    else:
+        raise NameError('Will add a version that splits based on storm number later!!')
+    #
+    return SHIPS_train,SHIPS_test
 #
 # 5. get_RI_classes identifies our classes for Rapid Intensification (RI). Rapid intesification occurs when 24-hr change in VMAX exceeds RI_thresh (default threshold is 30 kts). Rapid weakening occurs when 24-hour change in VMAX is lower than -RI_thresh.  Steady state occurs when the 24-hour change in VMAX is between +/- 10 kts.  Intensification: 24-hr change in VMAX between 10-RI_thresh kts; weakening, 24-hr change in VMAX between -10 and -RI_thresh kts. We can also choose whether or not to identify only RI cases and non-RI cases. 
 ## inputs:
@@ -175,7 +176,7 @@ def calc_d24_VMAX(SHIPS,init_HR):
 ##     diff: dataframe containing 24-hour change in SHIPS predictors with added flag for STORM_class
 
 # 
-def get_RI_classes(diff,RI_only,RI_thresh):
+def get_RI_classes(diff,RI_only=False,RI_thresh=30):
     # if RI_only = True, differentiate only between RI and everything else. Otherwise use all categories
     if RI_only == True:
         diff['STORM_class'] = [1 if x >= RI_thresh else 0 for x in diff['VMAX']]
@@ -269,7 +270,79 @@ def get_RI_classes(diff,RI_only,n_classes=0,RI_thresh=30):
                        else 'SS' for x in diff['VMAX']]
     return diff
 ## 
-
+#######
+## Split SHIPS predictors into training/testing data based on years, calculate 24-hr intensity change, get intensity classification, and drop unnecessary columns that will not be our final predictors.  
+#
+# Dependent functions (scroll up in this file for more):
+#    SHIPS_train_test_split: splits SHIPS predictors into training/testing by leaving 2 randomly-selected years for testing
+#    calc_d24_VMAX: calculates 24-hr changes in all predictors (primarily intended for intensity change)
+#    get_RI_classes: classifies cases based on 24-hr intensity change; classes are either RI/no-RI, or follow 5 class distinction outlined above
+#    fore_hr_averaging: determine whether or not we are using hr-24 predictors, or averaging predictors over hrs 0-24
+#
+# Inputs:
+## SHIPS_predictors: pandas dataframe including all of our SHIPS predictors of interest
+## test_years: array of 2 years to hold out of training set for testing
+## hrs_max: maximum hour of our prediction (default = 24)
+## to_predict: name of the feature we want to predict (usually, we want to predict 24-h intensity change if we are doing a regression problem, and intensity class if we are doing a classification problem
+## is_RI_only: boolean; if True, we only want to differentiate between RI and non-RI.  Otherwise, we want to identify all 5 classes.
+## RI_thresh: the threshhold for the change in wind speed at which we identify RI/RW [kts]. Default is 30 kts
+## to_IND: names of SHIPS_predictors to set to index
+## to_DROP: names of SHIPS predictors to drop (not included in final predictor set)
+## DO_AVG: Boolean that determines whether or not we are averaging predictors over hours 0-24 (True), or just using hr-24 predictors (False)
+## Outputs:
+## diff:  Our input Pandas dataframe, but with an additional column that includes information about the storm intensity class (['I_class'])
+##
+def SHIPS_train_test_shuffle_CLASS(SHIPS_predictors,test_years,to_predict,is_RI_only,to_IND,to_DROP,DO_AVG,n_classes,RI_thresh=30,hrs_max=24):
+    SHIPS_train,SHIPS_test = SHIPS_train_test_split(SHIPS_predictors,test_years,True)
+    # Select desired hours for predictions
+    SHIPS_train = SHIPS_train[SHIPS_train['TIME'].isin(np.arange(0,hrs_max+1))]
+    SHIPS_test = SHIPS_test[SHIPS_test['TIME'].isin(np.arange(0,hrs_max+1))]
+    # 
+    SHIPS_train = SHIPS_train.set_index(['BASIN','CASE','TIME'])
+    SHIPS_test = SHIPS_test.set_index(['BASIN','CASE','TIME'])
+    # Are we predicting <code>VMAX</code> or the change in <code>VMAX</code>? 
+    #if to_predict == 'd_VMAX':
+    diff_train = calc_d24_VMAX(SHIPS_train,0)
+    diff_train = get_RI_classes(diff_train,is_RI_only,n_classes,RI_thresh)
+    diff_train = diff_train.rename(columns={'VMAX':'d24_VMAX'})
+    predict_train = diff_train[[to_predict]]
+    diff_train = diff_train.drop(columns={to_predict})
+    #
+    diff_test = calc_d24_VMAX(SHIPS_test,0)
+    diff_test = get_RI_classes(diff_test,is_RI_only,n_classes,RI_thresh)
+    diff_test = diff_test.rename(columns={'VMAX':'d24_VMAX'})
+    predict_test = diff_test[[to_predict]]
+    diff_test = diff_test.drop(columns={to_predict})
+    # Join and then get predictands
+    SHIPS_train_all = SHIPS_train.join(predict_train).reset_index().set_index(to_IND)
+    SHIPS_test_all = SHIPS_test.join(predict_test).reset_index().set_index(to_IND)
+    y_train_f = SHIPS_train_all[[to_predict]].dropna(how='all')
+    y_test_f = SHIPS_test_all[[to_predict]].dropna(how='all')
+    # Drop redundant columns and drop hour 24 from predictors
+    #SHIPS_train_all = SHIPS_train_all.reset_index().set_index(to_IND)
+    SHIPS_train_d = SHIPS_train_all.drop(columns=to_DROP)
+    #
+    #SHIPS_test_all = SHIPS_test_all.reset_index().set_index(to_IND)
+    SHIPS_test_d = SHIPS_test_all.drop(columns=to_DROP)
+    X_train = SHIPS_train_d.drop([24],axis=0,level=4)
+    X_test = SHIPS_test_d.drop([24],axis=0,level=4)
+    # Decide on whether or not to average over all time periods
+    X_train_full,X_test_full,y_train,y_test = fore_hr_averaging(X_train,X_test,y_train_f,y_test_f,DO_AVG)
+    # Discard all cases for which we do not have a predictand
+    X_train_trim = X_train_full.loc[y_train.index.values]
+    X_test_trim = X_test_full.loc[y_test.index.values]
+    X_train_trim = X_train_trim.dropna(how='any')
+    X_test_trim = X_test_trim.dropna(how='any')
+    y_train = y_train.loc[X_train_trim.index.values]
+    y_test = y_test.loc[X_test_trim.index.values]
+    #
+    feature_names = X_train_trim.columns
+    # Shuffle data
+    fX_train_trim = X_train_trim.reindex(np.random.permutation(X_train_trim.index))
+    fy_train = y_train.reindex(fX_train_trim.index)
+    fX_test_trim = X_test_trim.reindex(np.random.permutation(X_test_trim.index))
+    fy_test = y_test.reindex(fX_test_trim.index)
+    return feature_names,fX_train_trim,fy_train,fX_test_trim,fy_test,diff_train,diff_test
 ##
 # 7. load_processed_SHIPS loads the SHIPS predictors that have been preprocessed overall (data have been cleaned, TC cases only, scaling factors applied) and to specific requirements (how was the land mask applied, how many hours are we forecasting over, etc) 
 ## inputs:
@@ -284,17 +357,17 @@ def get_RI_classes(diff,RI_only,n_classes=0,RI_thresh=30):
 ##     SHIPS_predictors: dataframe containing SHIPS predictors for whichever basins we care about
 ##.    BASIN:  list of all basins included in SHIPS_predictors
 
-def load_processed_SHIPS(yr_start,yr_end,mask_TYPE,max_fore,interp_str,use_basin='ALL'):
+def load_processed_SHIPS(yr_start,yr_end,mask_TYPE,max_fore,interp_str,use_basin='ALL',pred_set='BASIC'):
     SHIPS_predictors = pd.DataFrame()
-    fpath_load = 'DATA/processed/'
+    fpath_load = '~/SHIPS/SHIPS_processed_'
     if use_basin == 'ALL':
-        BASIN = ['ATLANTIC','EAST_PACIFIC','WEST_PACIFIC','SOUTHERN_HEM']
+        BASIN = ['ATLANTIC','EAST_PACIFIC','WEST_PACIFIC','SOUTH_PACIFIC']
     else:
         BASIN = [use_basin]
     #
     for i_name in BASIN:
-        fname_load = fpath_load+'SHIPS_processed_{BASIN}_set_yrs_{yr_start}-{yr_end}_max_fore_hr_{max_fore}_{interp_str}_'\
-        'land_mask_{mask_TYPE}.csv'.format(BASIN=i_name,yr_start=yr_start,yr_end=yr_end,
+        fname_load = fpath_load+'{BASIN}_{pred_set}_set_yrs_{yr_start}-{yr_end}_max_fore_hr_{max_fore}_{interp_str}_'\
+        'land_mask_{mask_TYPE}.csv'.format(BASIN=i_name,pred_set=pred_set,yr_start=yr_start,yr_end=yr_end,
                                           max_fore=max_fore,interp_str=interp_str,mask_TYPE=mask_TYPE)
         iload = pd.read_csv(fname_load)
         # Change RSST / RHCN to NSST / NOHC just to keep naming consistent
@@ -342,52 +415,3 @@ def calculate_class_weights(SHIPS,n_classes,RI_thresh=30,init_hr=0):
     class_size_pct['FRAC'] = class_size_pct/class_size_pct.sum(level=0)
     class_size_pct['WEIGHT'] = 1/class_size_pct['FRAC']
     return class_size_pct
-#
-# 9.  apply_land_mask applies a mask to SHIPS cases based on distance to land.  We default by masking out cases within 100 km of land, though this can be changed. 
-##
-## inputs:
-## SHIPS_in: dataframe with SHIPS predictors 
-## TYPE: type of land mask we want to use (see preprocess_SHIPS_predictors.ipynb for details)
-## max_time: time period over which we are checking DTL (default: 24 hrs) [hr]
-## DTL_thresh: threshold at which we apply land mask. default is 100 km [km]
-## scale: for one of the land mask type options, we scale but do not mask out cases that are less than DTL_thresh from land
-##
-## outputs:
-##  SHIPS_mask: SHIPS predictors with land mask applied
-
-def apply_land_mask(SHIPS_in,TYPE,max_time=24,DTL_thresh=100,scale=0.1):
-    cases = SHIPS_in.dropna(how='all')['CASE'].unique().tolist()
-    # TYPE 1: SIMPLE_MASK: Filter out all cases where DTL < DTL_thresh at TIME = 0 or TIME = max_time
-    if TYPE == 'SIMPLE_MASK':
-        SHIPS_mask = SHIPS_in.set_index(['CASE','TIME'])
-        for icase in cases:
-            i_SHIPS_mask = SHIPS_mask.loc[icase]
-            if 0 not in i_SHIPS_mask.index:
-                mask = True
-            elif (max_time in i_SHIPS_mask.index) & (0 in i_SHIPS_mask.index):
-                mask = (i_SHIPS_mask.loc[0]['DTL'] <= DTL_thresh) | (i_SHIPS_mask.loc[max_time]['DTL'] <= DTL_thresh)
-            else:
-                mask = (i_SHIPS_mask.loc[0]['DTL'] <= DTL_thresh)
-            if mask == True:
-                SHIPS_mask.loc[icase] = np.nan
-    ##
-    # TYPE 2: SIMPLE_w_INT: As with SIMPLE_MASK, but filter if DTL < DTL_thresh at any time between TIME = 0 and TIME = max_time
-    elif TYPE == 'SIMPLE_w_INT':
-        SHIPS_mask = SHIPS_in.set_index(['CASE','TIME'])
-        for icase in cases:
-            i_SHIPS_mask = SHIPS_mask.loc[icase]
-            i_m_trim = i_SHIPS_mask.loc[slice(0,max_time)]
-            mask = (i_m_trim['DTL'] <= DTL_thresh)
-            if mask.any() == True:
-                SHIPS_mask.loc[icase] = np.nan
-    ##
-    # TYPE 3: SCALAR_MASK: For all cases where DTL at TIME = 0 or TIME = max_time is less than some DTL_thresh, 
-    # multiply the DTL by a scaling factor of 0.1 and use this DTL_scalar to reduce all SHIPS predictors accordingly. 
-    # If DTL <= 0, scaling factor is 0.
-    # elif TYPE == 'SCALAR_MASK':
-       
-    # TYPE 5: no_mask.  Do not mask out any cases regardless of if they are over land
-    elif TYPE == 'no_mask':
-        SHIPS_mask = SHIPS_in
-    #
-    return SHIPS_mask
