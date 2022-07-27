@@ -125,7 +125,7 @@ DO_AVG = True
 # 
 # We'll try a few different ways of applying class weights, and we'll try undersampling.  Since our minority classes can be quite small, we will avoid oversampling (for now, at least).
 
-# In[6]:
+# In[19]:
 
 
 score = ['gini']
@@ -138,12 +138,12 @@ use_custom_wts = False
 to_predict = 'I_class'
 # Model hyperparameters
 max_features = [4,5]
-max_depth = [5,6]
+max_depth = [5,6,8,11]
 min_samples_leaf = [2,4]
-n_estimators = [250,500]
+n_estimators = [250]#,500]
 
 
-# In[7]:
+# In[20]:
 
 
 fig_format = 'png'
@@ -151,7 +151,7 @@ fig_format = 'png'
 
 # ##### Load our pre-processed SHIPS files
 
-# In[8]:
+# In[21]:
 
 
 SHIPS_predictors,BASIN = load_processed_SHIPS(yr_start,yr_end_LOAD,mask_TYPE,max_fore,interp_str,use_basin)
@@ -162,7 +162,7 @@ SHIPS_predictors = SHIPS_predictors[pd.to_datetime(SHIPS_predictors['DATE_full']
 
 # ##### Calculate class weights, if desired
 
-# In[9]:
+# In[22]:
 
 
 if use_custom_wts:
@@ -178,7 +178,7 @@ else:
 # ##### Bootstrapped model training
 # First, initialize some dataframes for results
 
-# In[10]:
+# In[36]:
 
 
 predicted_y_ALL = pd.DataFrame()
@@ -205,11 +205,11 @@ report_ALL = pd.DataFrame()
 # 4. Once training is complete, we try to predict class of our validation years.  We predict each ocean basin separately, as well as predict all ocean basins combined. We use `get_scores_best_params_RF` to get the hyperparameters for our best model, `get_confusion_matrix_RF` to get the confusion matrix and contingency table stats for our model, `get_feature_importances_RF` to get the feature importances, and `get_roc_AUC` to get the receiver operator curve (ROC) and area under the curve (AUC). 
 # 5. We save all of the output and repeat the process, selecting new validation years and fully re-training every time until we have done `N_samples` experiments. 
 
-# In[ ]:
+# In[37]:
 
 
 # Experiment parameters
-N_samples = 15
+N_samples = 5
 ncats = 2
 scoring = 'f1_weighted'
 cut = 'equal'
@@ -286,6 +286,30 @@ for i in np.arange(0,N_samples):
         fi_pred_train_ALL = fi_pred_train_ALL.append(fi_pred_train)
         cm_ALL = cm_ALL.append(cm_stats)
         report_ALL = report_ALL.append(report)
+
+
+# In[38]:
+
+
+cm_ALL.set_index(['Category Names','BASIN']).xs(('RI','ALL'))
+
+
+# In[39]:
+
+
+report_ALL.reset_index().set_index(['BASIN','index']).xs('ALL')['1.0']
+
+
+# In[40]:
+
+
+predicted_y_ALL
+
+
+# In[18]:
+
+
+pd.to_datetime(X_test.reset_index()['DATE_full']).dt.year.unique()
 
 
 # ##### Create output directory and set up file extensions for saving
