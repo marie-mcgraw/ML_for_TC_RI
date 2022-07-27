@@ -11,101 +11,9 @@ from sklearn.metrics import roc_curve,roc_auc_score,confusion_matrix,accuracy_sc
 from sklearn.metrics import precision_recall_curve, auc, f1_score, fbeta_score, precision_recall_fscore_support
 from sklearn.inspection import permutation_importance
 from sklearn.pipeline import Pipeline
-from utils.SHIPS_preprocess import calc_d24_VMAX, get_RI_classes, fore_hr_averaging
+from TEST_OLD_UTILS.SHIPS_preprocess import SHIPS_train_test_split, calc_d24_VMAX, fore_hr_averaging, SHIPS_train_test_shuffle_CLASS
+from TEST_OLD_UTILS.SHIPS_preprocess import load_processed_SHIPS, calculate_class_weights, get_RI_classes
 
-# 4.  SHIPS_train_test_split splits SHIPS data into training and testing sets based on either year or storm.  We can't just do a typical train-test split because each CASE is not completely independent (i.e., the same storm's measurements 6 hours apart are different cases but these two cases are not independent from each other). 
-## inputs:
-##     SHIPS: input SHIPS data, in dataframe format
-##     TEST_years: array of years that are included in test set (would use storm names if we split by storms)
-##     use_years: boolean indicating whether or not to split by years or by storm number (default is to split by years)
-## outputs:
-##     SHIPS_train: SHIPS data identified as part of the training set
-##     SHIPS_test: SHIPS data identified as part of the testing set
-
-def SHIPS_train_test_split(SHIPS,TEST_years,use_years=True):
-    if use_years == True:
-        # Add an is_TRAIN flag based on the year of 
-        SHIPS['is_TRAIN'] = [0 if np.isin(x,TEST_years) else 1 for x in pd.to_datetime(SHIPS['DATE_full']).dt.year]
-        SHIPS_train = SHIPS.where(SHIPS['is_TRAIN']==1).dropna(how='all')
-        SHIPS_test = SHIPS.where(SHIPS['is_TRAIN']==0).dropna(how='all')
-    else:
-        raise NameError('Will add a version that splits based on storm number later!!')
-    #
-    return SHIPS_train,SHIPS_test
-
-#######
-## Split SHIPS predictors into training/testing data based on years, calculate 24-hr intensity change, get intensity classification, and drop unnecessary columns that will not be our final predictors.  
-#
-# Dependent functions (scroll up in this file for more):
-#    SHIPS_train_test_split: splits SHIPS predictors into training/testing by leaving 2 randomly-selected years for testing
-#    calc_d24_VMAX: calculates 24-hr changes in all predictors (primarily intended for intensity change)
-#    get_RI_classes: classifies cases based on 24-hr intensity change; classes are either RI/no-RI, or follow 5 class distinction outlined above
-#    fore_hr_averaging: determine whether or not we are using hr-24 predictors, or averaging predictors over hrs 0-24
-#
-# Inputs:
-## SHIPS_predictors: pandas dataframe including all of our SHIPS predictors of interest
-## test_years: array of 2 years to hold out of training set for testing
-## hrs_max: maximum hour of our prediction (default = 24)
-## to_predict: name of the feature we want to predict (usually, we want to predict 24-h intensity change if we are doing a regression problem, and intensity class if we are doing a classification problem
-## is_RI_only: boolean; if True, we only want to differentiate between RI and non-RI.  Otherwise, we want to identify all 5 classes.
-## RI_thresh: the threshhold for the change in wind speed at which we identify RI/RW [kts]. Default is 30 kts
-## to_IND: names of SHIPS_predictors to set to index
-## to_DROP: names of SHIPS predictors to drop (not included in final predictor set)
-## DO_AVG: Boolean that determines whether or not we are averaging predictors over hours 0-24 (True), or just using hr-24 predictors (False)
-## Outputs:
-## diff:  Our input Pandas dataframe, but with an additional column that includes information about the storm intensity class (['I_class'])
-##
-def SHIPS_train_test_shuffle_CLASS(SHIPS_predictors,test_years,to_predict,is_RI_only,to_IND,to_DROP,DO_AVG,n_classes,RI_thresh=30,hrs_max=24):
-    SHIPS_train,SHIPS_test = SHIPS_train_test_split(SHIPS_predictors,test_years,True)
-    # Select desired hours for predictions
-    SHIPS_train = SHIPS_train[SHIPS_train['TIME'].isin(np.arange(0,hrs_max+1))]
-    SHIPS_test = SHIPS_test[SHIPS_test['TIME'].isin(np.arange(0,hrs_max+1))]
-    # 
-    SHIPS_train = SHIPS_train.set_index(['BASIN','CASE','TIME'])
-    SHIPS_test = SHIPS_test.set_index(['BASIN','CASE','TIME'])
-    # Are we predicting <code>VMAX</code> or the change in <code>VMAX</code>? 
-    #if to_predict == 'd_VMAX':
-    diff_train = calc_d24_VMAX(SHIPS_train,0)
-    diff_train = get_RI_classes(diff_train,is_RI_only,n_classes,RI_thresh)
-    diff_train = diff_train.rename(columns={'VMAX':'d24_VMAX'})
-    predict_train = diff_train[[to_predict]]
-    diff_train = diff_train.drop(columns={to_predict})
-    #
-    diff_test = calc_d24_VMAX(SHIPS_test,0)
-    diff_test = get_RI_classes(diff_test,is_RI_only,n_classes,RI_thresh)
-    diff_test = diff_test.rename(columns={'VMAX':'d24_VMAX'})
-    predict_test = diff_test[[to_predict]]
-    diff_test = diff_test.drop(columns={to_predict})
-    # Join and then get predictands
-    SHIPS_train_all = SHIPS_train.join(predict_train).reset_index().set_index(to_IND)
-    SHIPS_test_all = SHIPS_test.join(predict_test).reset_index().set_index(to_IND)
-    y_train_f = SHIPS_train_all[[to_predict]].dropna(how='all')
-    y_test_f = SHIPS_test_all[[to_predict]].dropna(how='all')
-    # Drop redundant columns and drop hour 24 from predictors
-    #SHIPS_train_all = SHIPS_train_all.reset_index().set_index(to_IND)
-    SHIPS_train_d = SHIPS_train_all.drop(columns=to_DROP)
-    #
-    #SHIPS_test_all = SHIPS_test_all.reset_index().set_index(to_IND)
-    SHIPS_test_d = SHIPS_test_all.drop(columns=to_DROP)
-    X_train = SHIPS_train_d.drop([24],axis=0,level=4)
-    X_test = SHIPS_test_d.drop([24],axis=0,level=4)
-    # Decide on whether or not to average over all time periods
-    X_train_full,X_test_full,y_train,y_test = fore_hr_averaging(X_train,X_test,y_train_f,y_test_f,DO_AVG)
-    # Discard all cases for which we do not have a predictand
-    X_train_trim = X_train_full.loc[y_train.index.values]
-    X_test_trim = X_test_full.loc[y_test.index.values]
-    X_train_trim = X_train_trim.dropna(how='any')
-    X_test_trim = X_test_trim.dropna(how='any')
-    y_train = y_train.loc[X_train_trim.index.values]
-    y_test = y_test.loc[X_test_trim.index.values]
-    #
-    feature_names = X_train_trim.columns
-    # Shuffle data
-    fX_train_trim = X_train_trim.reindex(np.random.permutation(X_train_trim.index))
-    fy_train = y_train.reindex(fX_train_trim.index)
-    fX_test_trim = X_test_trim.reindex(np.random.permutation(X_test_trim.index))
-    fy_test = y_test.reindex(fX_test_trim.index)
-    return feature_names,fX_train_trim,fy_train,fX_test_trim,fy_test,diff_train,diff_test
 
 ###
 # apply_class_label applies a label (string) to each class for plotting purposes.  We have two choices--RI only, or all classes. 
@@ -138,7 +46,70 @@ def apply_class_label(y_train,y_test,X_train,X_test,is_RI_only):
     #
     return y_train,y_test
 #
+# 3. calc_d_VMAX calculates the 24-hour change in VMAX, starting at hour init_HR (i.e., if we start at hr 6, we calculate the change between hr 6 and hr 30 (6 + 24)
+## inputs:
+##   SHIPS: input SHIPS data, in dataframe format
+##   init_HR: beginning of 24-hour period
+##   
+## outputs:
+##    diff: dataframe with 24-hour changes in numerical predictors 
+def calc_d24_VMAX(SHIPS,init_HR):
+    nlev = SHIPS.index.nlevels
+    SHIPS_t0 = SHIPS.xs(init_HR,level=nlev-1)
+    SHIPS_t0['DATE_full'] = pd.to_datetime(SHIPS_t0['DATE_full'])
+    SHIPS_p24 = SHIPS_t0.shift(-4)
+    # Calculate 24-hr change in all numerical predictors
+    pred_num = ['SHRG','D200','Z850','VMAX','VMPI','DELV','RHMD','POT','DELV -12','GOES Tb',
+                's(GOES Tb)','pct < -50C','storm size','PC1','PC2','PC3','PC4']
+    diff = SHIPS_p24[pred_num] - SHIPS_t0[pred_num]
+    #diff = diff.dropna(how='all')
+    # Drop if date difference > 1 day (so we aren't comparing two different storms)
+    date_diff = SHIPS_p24['DATE_full'] - SHIPS_t0['DATE_full']
+    diff = diff.where(date_diff == pd.Timedelta(1,'D')).dropna(how='all')
+    diff['DATE_full'] = SHIPS_t0['DATE_full']
+    return diff
+#
+# 4.  SHIPS_train_test_split splits SHIPS data into training and testing sets based on either year or storm.  We can't just do a typical train-test split because each CASE is not completely independent (i.e., the same storm's measurements 6 hours apart are different cases but these two cases are not independent from each other). 
+## inputs:
+##     SHIPS: input SHIPS data, in dataframe format
+##     TEST_years: array of years that are included in test set (would use storm names if we split by storms)
+##     use_years: boolean indicating whether or not to split by years or by storm number (default is to split by years)
+## outputs:
+##     SHIPS_train: SHIPS data identified as part of the training set
+##     SHIPS_test: SHIPS data identified as part of the testing set
+
+def SHIPS_train_test_split(SHIPS,TEST_years,use_years=True):
+    if use_years == True:
+        # Add an is_TRAIN flag based on the year of 
+        SHIPS['is_TRAIN'] = [0 if np.isin(x,TEST_years) else 1 for x in pd.to_datetime(SHIPS['DATE_full']).dt.year]
+        SHIPS_train = SHIPS.where(SHIPS['is_TRAIN']==1).dropna(how='all')
+        SHIPS_test = SHIPS.where(SHIPS['is_TRAIN']==0).dropna(how='all')
+    else:
+        raise NameError('Will add a version that splits based on storm number later!!')
+    #
+    return SHIPS_train,SHIPS_test
 #######
+## Split SHIPS predictors into training/testing data based on years, calculate 24-hr intensity change, get intensity classification, and drop unnecessary columns that will not be our final predictors.  
+#
+# Dependent functions (scroll up in this file for more):
+#    SHIPS_train_test_split: splits SHIPS predictors into training/testing by leaving 2 randomly-selected years for testing
+#    calc_d24_VMAX: calculates 24-hr changes in all predictors (primarily intended for intensity change)
+#    get_RI_classes: classifies cases based on 24-hr intensity change; classes are either RI/no-RI, or follow 5 class distinction outlined above
+#    fore_hr_averaging: determine whether or not we are using hr-24 predictors, or averaging predictors over hrs 0-24
+#
+# Inputs:
+## SHIPS_predictors: pandas dataframe including all of our SHIPS predictors of interest
+## test_years: array of 2 years to hold out of training set for testing
+## hrs_max: maximum hour of our prediction (default = 24)
+## to_predict: name of the feature we want to predict (usually, we want to predict 24-h intensity change if we are doing a regression problem, and intensity class if we are doing a classification problem
+## is_RI_only: boolean; if True, we only want to differentiate between RI and non-RI.  Otherwise, we want to identify all 5 classes.
+## RI_thresh: the threshhold for the change in wind speed at which we identify RI/RW [kts]. Default is 30 kts
+## to_IND: names of SHIPS_predictors to set to index
+## to_DROP: names of SHIPS predictors to drop (not included in final predictor set)
+## DO_AVG: Boolean that determines whether or not we are averaging predictors over hours 0-24 (True), or just using hr-24 predictors (False)
+## Outputs:
+## diff:  Our input Pandas dataframe, but with an additional column that includes information about the storm intensity class (['I_class'])
+##
 
 ##
 # calc_CM_stats calculates basic statistics from the confusion matrix of classification models (developed for multicategorical classification problems).  We are interested in the following:
@@ -260,9 +231,9 @@ def create_gridsearch_RF(is_standard,score,max_depth,n_estimators,max_features,m
     # Create pipeline
     if is_standard:
         pipe = Pipeline([('scaler',StandardScaler()),('clf',RandomForestClassifier(
-                                                                class_weight=class_weight,n_jobs=-1))])
+                                                                class_weight=class_weight))])
     else:
-        pipe = Pipeline([('clf',RandomForestClassifier(class_weight=class_weight,n_jobs=-1))])
+        pipe = Pipeline([('clf',RandomForestClassifier(class_weight=class_weight))])
     ## Cross-validation
     cv = RepeatedStratifiedKFold(n_splits = k_folds, n_repeats=n_repeats)
     ## Gridsearch
