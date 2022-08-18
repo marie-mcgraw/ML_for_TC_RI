@@ -15,21 +15,21 @@ os.environ["VECLIB_MAXIMUM_THREADS"] = NUM_THREADS
 os.environ["NUMEXPR_NUM_THREADS"] = NUM_THREADS
 
 
-# In[15]:
+# In[2]:
 
 
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
-from TEST_OLD_UTILS.SHIPS_preprocess import SHIPS_train_test_split, calc_d24_VMAX, fore_hr_averaging, SHIPS_train_test_shuffle_CLASS
-from TEST_OLD_UTILS.SHIPS_preprocess import load_processed_SHIPS, calculate_class_weights, get_RI_classes
-from TEST_OLD_UTILS.SHIPS_ML_model_funcs import apply_class_label, calc_CM_stats, get_scores_class_rept, get_roc_auc, get_feature_importances_RF
-from TEST_OLD_UTILS.SHIPS_ML_model_funcs import get_confusion_matrix_RF, get_scores_best_params_RF, create_gridsearch_RF, get_train_test_split
-from TEST_OLD_UTILS.SHIPS_ML_model_funcs import get_confusion_matrix_LR, get_scores_best_params_LR, create_gridsearch_LR, get_feature_importances_LR
-from TEST_OLD_UTILS.SHIPS_ML_model_funcs import calc_AUPD, calculate_PD_curves
-from TEST_OLD_UTILS.SHIPS_plotting import plot_roc_curve, plot_precision_recall_vs_threshold,add_model_results,make_performance_diagram_background
-from TEST_OLD_UTILS.SHIPS_plotting import plot_CSI_vs_bias, plot_basic_score_basin, plot_PD_curves
+from utils.SHIPS_preprocess import SHIPS_train_test_split, calc_d24_VMAX, fore_hr_averaging, SHIPS_train_test_shuffle_CLASS
+from utils.SHIPS_preprocess import load_processed_SHIPS, calculate_class_weights, get_RI_classes
+from utils.SHIPS_ML_model_funcs import apply_class_label, calc_CM_stats, get_scores_class_rept, get_roc_auc, get_feature_importances_RF
+from utils.SHIPS_ML_model_funcs import get_confusion_matrix_RF, get_scores_best_params_RF, create_gridsearch_RF, get_train_test_split
+from utils.SHIPS_ML_model_funcs import get_confusion_matrix_LR, get_scores_best_params_LR, create_gridsearch_LR, get_feature_importances_LR
+from utils.SHIPS_ML_model_funcs import calc_AUPD, calculate_PD_curves
+from utils.SHIPS_plotting import plot_roc_curve, plot_precision_recall_vs_threshold,add_model_results,make_performance_diagram_background
+from utils.SHIPS_plotting import plot_CSI_vs_bias, plot_basic_score_basin, plot_PD_curves
 #
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import GridSearchCV, cross_val_score, RepeatedStratifiedKFold
@@ -46,7 +46,7 @@ from utils.SHIPS_ML_model_funcs_imblearn import create_gridsearch_RF_sampler
 
 # ##### Ignore Annoying Warnings
 
-# In[16]:
+# In[3]:
 
 
 import warnings
@@ -69,7 +69,7 @@ warnings.simplefilter(action="ignore",category=ConvergenceWarning)
 # * `yr_end_TRAIN`: Last year to use in training [2018 is default]
 # * `use_basin`:  Default is to use all basins, but if we just want to use one basin, we can specify that here [ATLANTIC, EAST_PACIFIC, WEST_PACIFIC, and SOUTHERN_HEM are the choices]
 
-# In[17]:
+# In[4]:
 
 
 max_fore = 24 # maximum forecast hours
@@ -101,7 +101,7 @@ use_basin = 'ALL'
 #     * `DATE_full`: date of case (YYYY-MM-DD-HH:MM:SS).  Time stamp is for `time 0`
 #     * `TIME`: forecast time.  should range from `0` to `max_fore_hrs`
 
-# In[18]:
+# In[5]:
 
 
 hrs_max = 24
@@ -138,7 +138,7 @@ DO_AVG = True
 # * <code>k_folds</code>: number of folds used in our cross-validation approach.  We will use a <code>Stratified K-Means cross-validation</code> since we have imbalanced classes. Default is `10`
 # * `n_repeats`: number of times we repeat k-folds cross-validation process. Default is `3`
 
-# In[30]:
+# In[6]:
 
 
 # Logistic
@@ -169,7 +169,7 @@ fig_format = 'png'
 
 # ##### Load our pre-processed SHIPS files
 
-# In[20]:
+# In[7]:
 
 
 def load_processed_SHIPS(yr_start,yr_end,mask_TYPE,max_fore,interp_str,use_basin='ALL'):
@@ -195,7 +195,7 @@ def load_processed_SHIPS(yr_start,yr_end,mask_TYPE,max_fore,interp_str,use_basin
     return SHIPS_predictors,BASIN
 
 
-# In[21]:
+# In[8]:
 
 
 SHIPS_predictors,BASIN = load_processed_SHIPS(yr_start,yr_end_LOAD,mask_TYPE,max_fore,interp_str,use_basin)
@@ -207,7 +207,7 @@ SHIPS_predictors = SHIPS_predictors[pd.to_datetime(SHIPS_predictors['DATE_full']
 # ##### Bootstrapped model training
 # First, initialize some dataframes for results
 
-# In[33]:
+# In[9]:
 
 
 predicted_y_ALL = pd.DataFrame()
@@ -218,21 +218,6 @@ fi_pred_train_ALL = pd.DataFrame()
 cm_ALL = pd.DataFrame()
 report_ALL = pd.DataFrame()
 # 
-predicted_y_ALL_RF = pd.DataFrame()
-roc_vals_ALL_RF = pd.DataFrame()
-p_vs_r_ALL_RF = pd.DataFrame()
-fi_pred_ALL_RF = pd.DataFrame()
-fi_pred_train_ALL_RF = pd.DataFrame()
-cm_ALL_RF = pd.DataFrame()
-report_ALL_RF = pd.DataFrame()
-#
-predicted_y_ALL_RF_ov = pd.DataFrame()
-roc_vals_ALL_RF_ov = pd.DataFrame()
-p_vs_r_ALL_RF_ov = pd.DataFrame()
-fi_pred_ALL_RF_ov = pd.DataFrame()
-fi_pred_train_ALL_RF_ov = pd.DataFrame()
-cm_ALL_RF_ov = pd.DataFrame()
-report_ALL_RF_ov = pd.DataFrame()
 
 
 # Next, outline our bootstrapping experiments
@@ -250,7 +235,7 @@ report_ALL_RF_ov = pd.DataFrame()
 # 4. Once training is complete, we try to predict class of our validation years.  We predict each ocean basin separately, as well as predict all ocean basins combined. We use `get_scores_best_params_RF` to get the hyperparameters for our best model, `get_confusion_matrix_RF` to get the confusion matrix and contingency table stats for our model, `get_feature_importances_RF` to get the feature importances, and `get_roc_AUC` to get the receiver operator curve (ROC) and area under the curve (AUC). 
 # 5. We save all of the output and repeat the process, selecting new validation years and fully re-training every time until we have done `N_samples` experiments. 
 
-# In[28]:
+# In[10]:
 
 
 def evaluate_model_RF(model,X_test,y_test,basin,fold,model_name,test_years,label_names,ncats,scoring):
@@ -293,7 +278,7 @@ def evaluate_model_RF(model,X_test,y_test,basin,fold,model_name,test_years,label
     return y_pred_all,roc_vals,p_vs_r,fi_pred,cm_stats,report
 
 
-# In[29]:
+# In[11]:
 
 
 def evaluate_model_LR(model,X_test,y_test,basin,fold,model_name,test_years,label_names,ncats,scoring):
@@ -336,20 +321,21 @@ def evaluate_model_LR(model,X_test,y_test,basin,fold,model_name,test_years,label
     return y_pred_all,roc_vals,p_vs_r,fi_pred,cm_stats,report
 
 
-# In[34]:
+# In[12]:
 
 
 # Experiment parameters
-N_samples = 15
+N_samples = 25
 ncats = 2
 scoring = 'f1_weighted'
 cut = 'equal'
 sampler = SMOTE(sampling_strategy = 0.9)
 sampler_str = 'over'
-# sampler2 = RandomUnderSampler(sampling_strategy = 0.5)
-# sampler_str2 = 'under'
+sampler2 = [RandomOverSampler(sampling_strategy = 0.9)]
+sampler_str2 = ['over']
 sampler_str_ALL = [sampler_str]#,sampler_str2]
 sampler_ALL = [sampler]#,sampler2]
+#
 # FULL_yrs = np.arange(yr_start,yr_end_TRAIN,1)
 use_custom_wts = False
 wts_sel = 0
@@ -367,6 +353,9 @@ for i in np.arange(0,N_samples):
     RF_model_ov = create_gridsearch_RF_sampler(is_standard,score,max_depth,n_estimators,max_features,min_samples_leaf,
                                 k_folds,n_repeats,scoring,sampler_ALL,sampler_str_ALL)
     #
+    RF_model_ROS = create_gridsearch_RF_sampler(is_standard,score,max_depth,n_estimators,max_features,min_samples_leaf,
+                                k_folds,n_repeats,scoring,sampler2,sampler_str2)
+    #
     RF_model = create_gridsearch_RF(is_standard,score,max_depth,n_estimators,max_features,min_samples_leaf,
                                 k_folds,n_repeats,use_custom_wts,wts_sel,scoring)
     # 
@@ -377,21 +366,41 @@ for i in np.arange(0,N_samples):
     LR_model.fit(X_train,y_train['I_class'])
     RF_model.fit(X_train,y_train['I_class'])
     RF_model_ov.fit(X_train,y_train['I_class'])
+    RF_model_ROS.fit(X_train,y_train['I_class'])
     # Now get scores for each basin
     print('validating models')
     for basin in BASIN_all:
         print('running ',basin)
         y_pred_all_RF_OV,roc_vals_RF_OV,p_vs_r_RF_OV,fi_pred_RF_OV,cm_stats_RF_OV,report_RF_OV = evaluate_model_RF(RF_model_ov,
-                              X_test,y_test,basin,i,'Random Forest (oversample)',test_years,label_names,ncats,scoring)
+                              X_test,y_test,basin,i,'Random Forest (SMOTE)',test_years,label_names,ncats,scoring)
         # 
+        y_pred_all_ROS,roc_vals_ROS,p_vs_r_ROS,fi_pred_ROS,cm_stats_ROS,report_ROS = evaluate_model_RF(RF_model_ROS,
+                              X_test,y_test,basin,i,'Random Forest (random oversample)',test_years,label_names,ncats,scoring)
+        #
         y_pred_all_RF,roc_vals_RF,p_vs_r_RF,fi_pred_RF,cm_stats_RF,report_RF = evaluate_model_RF(RF_model,
-                              X_test,y_test,basin,i,'Random Forest',test_years,label_names,ncats,scoring)
+                              X_test,y_test,basin,i,'Random Forest (class wt)',test_years,label_names,ncats,scoring)
         # 
         y_pred_all_LR,roc_vals_LR,p_vs_r_LR,fi_pred_LR,cm_stats_LR,report_LR = evaluate_model_LR(LR_model,
                               X_test,y_test,basin,i,'Logistic Reg.',test_years,label_names,ncats,scoring)
         # 
-        y_pred_all = pd.concat([y_pred_all_RF_OV,y_pred_all_RF,y_pred_all_LR])
+        y_pred_all = pd.concat([y_pred_all_RF_OV,y_pred_all_ROS,y_pred_all_RF,y_pred_all_LR])
         predicted_y_ALL = predicted_y_ALL.append(y_pred_all)
+        # 
+        roc_vals = pd.concat([roc_vals_RF,roc_vals_ROS,roc_vals_RF_OV,roc_vals_LR])
+        roc_vals_ALL = roc_vals_ALL.append(roc_vals)
+        #
+        pvr = pd.concat([p_vs_r_RF_OV,p_vs_r_ROS,p_vs_r_RF,p_vs_r_LR])
+        p_vs_r_ALL = p_vs_r_ALL.append(pvr)
+        # 
+        fi_pred = pd.concat([fi_pred_RF_OV,fi_pred_ROS,fi_pred_RF,fi_pred_LR])
+        fi_pred_ALL = fi_pred_ALL.append(fi_pred)
+        #
+        cm_stats = pd.concat([cm_stats_RF_OV,cm_stats_ROS,cm_stats_RF,cm_stats_LR])
+        cm_ALL = cm_ALL.append(cm_stats)
+        #
+        report = pd.concat([report_RF_OV,report_ROS,report_RF,report_LR])
+        report_ALL = report_ALL.append(report)
+        
     
 
 
@@ -401,9 +410,14 @@ for i in np.arange(0,N_samples):
 predicted_y_ALL['BASIN'] = predicted_y_ALL['Predicted Basin'] # For naming purposes
 foo = report_ALL.reset_index().rename(columns={'index':'Score'})
 foo2 = foo.set_index(['Score'])
-sns.stripplot(data=foo2.xs('recall'),x='BASIN',y='1.0',palette=sns.color_palette('rocket_r'),s=15)
-sns.stripplot(data=foo2.xs('f1-score'),x='BASIN',y='1.0',palette=sns.color_palette('mako'),s=30,alpha=0.5)
-sns.stripplot(data=foo2.xs('precision'),x='BASIN',y='1.0',palette=sns.color_palette('Reds'),s=5)
+fig2,ax2 = plt.subplots(1,1,figsize=(10,6))
+f2a = sns.stripplot(data=foo2.xs('recall'),x='BASIN',y='1.0',hue='Model',palette=sns.color_palette('tab10'),s=15,
+              label='_nolegend_',ax=ax2)
+f2b = sns.stripplot(data=foo2.xs('f1-score'),x='BASIN',y='1.0',hue='Model',palette=sns.color_palette('tab10'),s=30,
+              alpha=0.5,label='_nolegend_',ax=ax2)
+ax2.legend([],[],frameon=False)
+f2c = sns.stripplot(data=foo2.xs('precision'),x='BASIN',y='1.0',hue='Model',palette=sns.color_palette('tab10'),s=5,
+              alpha=0.5,label='_nolegend_',ax=ax2)
 
 
 # ##### Save everything
@@ -412,7 +426,7 @@ sns.stripplot(data=foo2.xs('precision'),x='BASIN',y='1.0',palette=sns.color_pale
 
 
 save_dir = 'DATA/ML_model_results/TRAINING/'
-model_type = 'all_models'
+model_type = 'all_models_ROS_and_SMOTE'
 save_dir = save_dir+model_type+'/'
 save_extension = 'TRAIN_SHIPS_vs_no_RI_{yr_start}-{yr_end}_{mask_TYPE}_{stand_str}_RI_thresh_{RI_thresh}''_{N}_samples_{scoring}.csv'.format(yr_start=yr_start,yr_end=yr_end_TRAIN,mask_TYPE=mask_TYPE,
                            stand_str=stand_str,RI_thresh=RI_thresh,N=N_samples,scoring=scoring)
@@ -422,7 +436,7 @@ save_ext_figs = 'TRAIN_SHIPS_SIMPLE_RI_vs_no_RI_{yr_start}-{yr_end}_{mask_TYPE}_
 
 # ##### Create subdirectories if they don't exist
 
-# In[35]:
+# In[ ]:
 
 
 if not os.path.exists(save_dir):
@@ -448,5 +462,5 @@ print('saved feat importances (training)')
 cm_ALL.to_csv(save_dir+'Conf_Matrix'+save_extension)
 print('saved confusion matrix')
 report_ALL.to_csv(save_dir+'Class_Report'+save_extension)
-print('saved classification report')
+print('saved classification report ',save_dir+'Class_Report'+save_extension)
 
