@@ -211,7 +211,7 @@ def make_performance_diagram_background(ax):
     this_color_map_object, this_color_norm_object = (
             _get_csi_color_scheme())
     # Add CSI contours and corresponding colorbar
-    plt.contourf(success_ratio_matrix, pod_matrix, csi_matrix,
+    ax.contourf(success_ratio_matrix, pod_matrix, csi_matrix,
               cmap=this_color_map_object, norm=this_color_norm_object,vmin=0.,alpha=0.5,
             vmax=1., axes=ax)
     
@@ -226,7 +226,7 @@ def make_performance_diagram_background(ax):
     FREQ_BIAS_LEVELS = np.array([0.25, 0.5, 0.75, 1, 1.5, 2, 3, 5])
     # FREQ_BIAS_WIDTH = 2
     # Now, add the lines of constant bias and label them. 
-    bias_contour_object = plt.contour(
+    bias_contour_object = ax.contour(
         success_ratio_matrix, pod_matrix, frequency_bias_matrix,
         FREQ_BIAS_LEVELS,axes=ax,cmap=plt.get_cmap('copper_r'),linewidths=4)
     ax.clabel(
@@ -341,7 +341,7 @@ def plot_PD_curves_compare_models(p_vs_r,ax,basin_sel,CSI_metric='median'):
     #pr_mean = pr_smoothed.groupby(['Model','Thresh Round']).mean().reset_index()
     # Get curve for median AUPD
     max_CSI_ind = p_vs_r.groupby(['BASIN','Model','Fold'])[['CSI','Bias']].agg({'CSI':'max'})#.xs(basin_sel)
-    colors = ['xkcd:crimson','xkcd:magenta','xkcd:purple']
+    colors = ['xkcd:coral','xkcd:turquoise','xkcd:tangerine','xkcd:leaf green']
     if CSI_metric == 'median':
         aupd_med = max_CSI_ind.xs(basin_sel).median(level=0)
         models_list = aupd_med.index.unique().tolist()
@@ -358,7 +358,7 @@ def plot_PD_curves_compare_models(p_vs_r,ax,basin_sel,CSI_metric='median'):
         models_list = min_fold.index.unique().tolist()
         for i in np.arange(0,len(models_list)):
             i_model = models_list[i]
-            print(i_model)
+            # print(i_model)
             CSI_fold = max_CSI_ind.xs((basin_sel,i_model)).loc[max_CSI_ind.xs((basin_sel,
                                                    i_model))['CSI']==min_fold.loc[i_model]['CSI']]
             pr_smoothed.xs((i_model,CSI_fold.index[0])).plot(x='Success Ratio',y='POD',color=colors[i],linewidth=4,ax=ax,
@@ -368,7 +368,7 @@ def plot_PD_curves_compare_models(p_vs_r,ax,basin_sel,CSI_metric='median'):
         models_list = min_fold.index.unique().tolist()
         for i in np.arange(0,len(models_list)):
             i_model = models_list[i]
-            print(i_model)
+           #  print(i_model)
             CSI_fold = max_CSI_ind.xs((basin_sel,i_model)).loc[max_CSI_ind.xs((basin_sel,
                                                    i_model))['CSI']==min_fold.loc[i_model]['CSI']]
             pr_smoothed.xs((i_model,CSI_fold.index[0])).plot(x='Success Ratio',y='POD',color=colors[i],linewidth=4,ax=ax,
@@ -378,3 +378,60 @@ def plot_PD_curves_compare_models(p_vs_r,ax,basin_sel,CSI_metric='median'):
     ax.set_xlim([0,1])
     ax.legend(fontsize=14)
     ax.set_ylim([0,1])
+### 11.  make_reliability_diagram:  A function to make a reliability diagram comparing our machine learning models to SHIPS-RII and the SHIPS consensus. 
+def make_reliability_diagram(ax,plot_lim,REL_DATA,basin_sel,palette,pct_range,models_skip=None):
+    # Inputs:
+    # ax: axes for figure
+    # plot_lim: limits for reliability diagram (extends beyond 100 b/c we want to add the info about case numbers)
+    # REL_DATA: Pandas dataset containing reliability diagram info.  Should include be in format of Basin, Model, 
+    #           Predicted Pct, Observed Pct, Observed No. RI, Observed No Total 
+    # basin_sel: basin we want to plot (right now, only works for Atlantic and East Pacific)
+    # palette: desired color palette (will depend on # of ML models)
+    # pct_range: range of predicted RI probabilities
+    # models_skip: option argument if we want to skip plotting case numbers for any model 
+    # Add 1:1 line
+    ax.plot([0,plot_lim],[0,plot_lim],linewidth=3,color='xkcd:slate grey')
+    # Add models--first we'll add dots for each predicted probability
+    sns.scatterplot(data=REL_DATA.xs(basin_sel).reset_index().sort_values('Model'),x='Predicted Pct',y='Observed Pct',hue='Model',
+                palette=sns.set_palette(palette),ax=ax,s=150,alpha=0.9)
+    # Then, lines to connect dots
+    sns.lineplot(data=REL_DATA.xs(basin_sel).reset_index().sort_values('Model'),x='Predicted Pct',y='Observed Pct',
+            hue='Model',palette=sns.set_palette(palette),ax=ax,linewidth=3,legend=False)
+    # Formatting
+    ax.set_ylim([-0.5,plot_lim])
+    ax.set_xlim([-0.5,plot_lim])
+    ax.set_xticks([5,10,20,30,40,50,60,70,80,90,100])
+    ax.set_yticks([5,10,20,30,40,50,60,70,80,90,100])
+    ax.tick_params(axis='y',labelsize=14)
+    ax.tick_params(axis='x',labelsize=14)
+    ax.legend(fontsize=13,loc='lower right')
+    ax.set_xlabel('Predicted RI Probability',fontsize=17)
+    ax.set_ylabel('Observed RI Probability',fontsize=17)
+    # Calculate total number of observations in each predicted probability bin
+    plt_nums = REL_DATA.xs(basin_sel).sort_values(['Predicted Pct']).reset_index().set_index(['Predicted Pct'])
+    ax.grid()
+    # 
+    totals = REL_DATA.xs(basin_sel).reset_index().sort_values('Predicted Pct').set_index(['Model','Predicted Pct'])
+    models_list = REL_DATA.reset_index().sort_values(by='Model')['Model'].unique().tolist()
+    # Add text containing number of obs per predicted RI probability
+    ycount = 0
+    for imod in np.arange(0,len(models_list)):
+        mod_sel = totals.xs(models_list[imod])
+        # print(models_list[imod])
+        if models_list[imod] in models_skip:
+            ycount = ycount
+        else:
+            ycount = ycount + 1
+        for i_pct in pct_range:
+            if i_pct in mod_sel.index:
+                ix_mod = mod_sel.xs(i_pct)['Observed No Total'].astype(int)
+            else:
+                ix_mod = 0
+            i_color = sns.color_palette()[imod]
+            if models_list[imod] in models_skip:
+                ycount = ycount
+                # print('do not plot')
+            else:
+                yval = 101+ycount*3
+                ax.text((i_pct-4 if i_pct == 5 else i_pct -2),yval,ix_mod,color=i_color,fontsize=13,weight='semibold')
+    return(ax)

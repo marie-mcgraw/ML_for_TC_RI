@@ -11,8 +11,8 @@ from sklearn.metrics import roc_curve,roc_auc_score,confusion_matrix,accuracy_sc
 from sklearn.metrics import precision_recall_curve, auc, f1_score, fbeta_score, precision_recall_fscore_support
 from sklearn.inspection import permutation_importance
 from sklearn.pipeline import Pipeline
-from TEST_OLD_UTILS.SHIPS_preprocess import SHIPS_train_test_split, calc_d24_VMAX, fore_hr_averaging, SHIPS_train_test_shuffle_CLASS
-from TEST_OLD_UTILS.SHIPS_preprocess import load_processed_SHIPS, calculate_class_weights, get_RI_classes
+from utils.SHIPS_preprocess import SHIPS_train_test_split, calc_d24_VMAX, fore_hr_averaging, SHIPS_train_test_shuffle_CLASS
+from utils.SHIPS_preprocess import load_processed_SHIPS, calculate_class_weights, get_RI_classes
 
 
 ###
