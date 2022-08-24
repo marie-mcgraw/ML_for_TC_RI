@@ -10,13 +10,18 @@ Original file is located at
 import numpy as np
 import xarray as xr
 import pandas as pd
+import os
 # from google.colab import drive
 import datetime
 # drive.mount('/content/drive')
 
 fname = 'lsdiaga_1982_2019_sat_ts.dat'
 BASIN_name = 'ATLANTIC'
-fname_save = 'SHIPS_predictors_full_{basin}.csv'.format(basin=BASIN_name)
+fdir_save = 'DATA/processed/'
+# Make data directory if it doesn't exist yet
+if not os.path.exists(fdir_save):
+    os.makedirs(fdir_save)
+fname_save = fdir_save+'SHIPS_predictors_full_{basin}.csv'.format(basin=BASIN_name)
 
 """Load file
 
@@ -85,4 +90,5 @@ with open(fname) as infile:
         new_col = new_col.sort_index().reset_index().drop(columns='index')
         df_new[line_s[-2]] = new_col
         df_new[[line_s[-2]+'_AGE']] = line_s[-1]
-
+# 
+SHIPS_all.to_csv(fname_save)
