@@ -1,3 +1,20 @@
+ #### Overview
+`ML_for_TC_RI` trains one (or more) random forest models (as well as a simple logistic regression model) to predict whether or not tropical cyclone cases undergo rapid intensification (RI) using the SHIPS developmental data.  The SHIPS developmental dataset can be downloaded from the [RAMMB website] (https://rammb2.cira.colostate.edu/research/tropical-cyclones/ships/).  We currently analyze the East Pacific, West Pacific, Atlantic, and Southern Hemisphere. The code in this notebook reads in the SHIPS developmental dataset, performs some basic preprocessing steps (such as averaging predictors over the time period of interest, removing flags and missing data, scaling predictors, filtering cases based on distance from land, and so on), and trains the machine learning models.  We note that we are currently using the 30 kt/24 hour definition of rapid intensification for all ocean basins; however, the threshold and time period can be adjusted as desired. We train the machine learning models on SHIPS cases from 2005-2018. We combine a bootstrapping approach to training with a modified leave-one-year-out cross-validation scheme.  For each instance of model training, we complete the following steps: 
+    1. Of the years 2005-2018, we randomly select 3 years to hold out for validation and train on the remaining years (including a hyperparameter sweep). 
+    2. We validate the trained model using the 3-year validation sample.  We save the output of the validation, including the confusion matrix, the feature importances, the precision-recall curves, the classification report, the ROC curve, and the predicted classes for the validation sample. 
+    3. We note that we train once, on samples from all ocean basins; during validation, we validate on a combined all-basin sample that includes cases from all basins, as well as on each basin individually.  
+
+We repeat the process a total of 25 times, fully re-training the models every time.  We train each machine learning model on the same training instance simultaneously so that all models are trained and validated on the same years.  We take this approach because:
+    1. When dealing with tropical cyclones, year to year variability is quite high, especially for rapid intensification which is by definition a rare event.  Thus, we don't want to overfit to any extreme years.
+    2. Since rapid intensification can occur for only a single storm (or not at all) in a given year, we validate on 3 years instead of just 1 (and again, this helps us avoid overfitting)
+    3. Our bootstrapped training approach gives us a built-in estimate of uncertainty, since we have 25 instances of training. 
+
+After the bootstrapped model training process, we identify the best-guess model and train it once on the full training period (2005-2018). We then test this best-guess model with SHIPS cases from 2019-2021*. 
+
+*As of 8/24/2022, the best-tracks for the JTWC basins (W. Pacific and S. Hemisphere) have not been released yet. Thus, the SHIPS developmental data contains the 2021 cases for the Atlantic and E. Pacific (NHC basins) but only goes through 2020 for the W. Pacific and S. Hemisphere.  We will update everything when the 2021 best-tracks are released. 
+
+#### Scripts and Notebooks
+
 <b>BASIC PREPROCESSING FOR SHIPS PREDICTORS</b>
 1. <b>Read in SHIPS predictors from text files</b>
     1. <b>Input:</b> SHIPS developmental dataset [data] (located at https://rammb2.cira.colostate.edu/research/tropical-cyclones/ships/)
@@ -9,7 +26,7 @@
         2. SHIPS scaling factors (`SHIPS_factors.txt` home directory) 
     3. <b>Code:</b> 
         1. `preprocess_SHIPS_predictors.ipynb` [Jupyter notebook/Python script]
-        2. SHIPS_preprocess utils [Python script in `util`]
+        2. `SHIPS_preprocess` utils [Python script in `util`]
     4. <b>Output:</b> preprocessed SHIPS predictors [separate file per basin] (located in `DATA/processed/SHIPS_processed_<basin>*.csv`)
 
 <b>EXPLORATORY</b>
