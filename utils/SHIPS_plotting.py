@@ -236,9 +236,9 @@ def make_performance_diagram_background(ax):
     ax.set_ylabel(r"Probability of Detection (${\frac{hits}{hits+misses}})$",fontsize=21)
     ax.set_xlabel(r"1 - False Alarm Ratio (${\frac{False Alarms}{Hits + False Alarms}})$",fontsize=21)
     ax.set_yticks([0,0.2,0.4,0.6,0.8,1.0])
-    ax.set_yticklabels([0,0.2,0.4,0.6,0.8,1.0],fontsize=15)
+    ax.set_yticklabels([0,0.2,0.4,0.6,0.8,1.0],fontsize=22)
     ax.set_xticks([0,0.2,0.4,0.6,0.8,1.0])
-    ax.set_xticklabels([0,0.2,0.4,0.6,0.8,1.0],fontsize=15)
+    ax.set_xticklabels([0,0.2,0.4,0.6,0.8,1.0],fontsize=22)
     return ax
 # 7. Add model results to performance diagram
 def add_model_results(ax,CM,cat_sel='RI'):
@@ -274,7 +274,7 @@ def add_model_results(ax,CM,cat_sel='RI'):
     sns.scatterplot(data=CM_ALL_sel.reset_index().sort_values(['BASIN','Model'],ignore_index=True),
                   x='SR',y='POD',hue='BASIN',style='Model',ax=ax,
                    palette=sns.set_palette(pal_sel),s=300,alpha=0.8,zorder=10)
-    ax.legend(fontsize=15)
+    ax.legend(fontsize=20).set_zorder(10)
 # 8.  Plot basic score vs basin.  If we want to see spread in some kind of score value as a function of basin. Options for box plot or swarm plot
 def plot_basic_score_basin(ax,data,y_val,is_swarm=True):
     if is_swarm:
@@ -323,16 +323,16 @@ def plot_PD_curves(p_vs_r,ax,basin_sel,style='-',plot_folds=True):
     med_fold = max_CSI_ind.xs(basin_sel).loc[max_CSI_ind.xs(basin_sel)['CSI']==aupd_med[0]]
     min_fold = max_CSI_ind.xs(basin_sel).idxmin()
     max_fold = max_CSI_ind.xs(basin_sel).idxmax()
-    pr_smoothed.xs(med_fold.index[0]).plot(x='Success Ratio',y='POD',ax=ax,color='xkcd:purple',linewidth=4,linestyle=style,
+    pr_smoothed.xs(med_fold.index[0]).plot(x='Success Ratio',y='POD',ax=ax,color='xkcd:purple',linewidth=6,linestyle=style,
                                            label='Median CSI')
-    pr_smoothed.xs(min_fold[0]).plot(x='Success Ratio',y='POD',ax=ax,color='xkcd:magenta',linewidth=4,linestyle=style,
+    pr_smoothed.xs(min_fold[0]).plot(x='Success Ratio',y='POD',ax=ax,color='xkcd:magenta',linewidth=6,linestyle=style,
                                            label='Min CSI')
-    pr_smoothed.xs(max_fold[0]).plot(x='Success Ratio',y='POD',ax=ax,color='xkcd:crimson',linewidth=4,linestyle=style,
+    pr_smoothed.xs(max_fold[0]).plot(x='Success Ratio',y='POD',ax=ax,color='xkcd:crimson',linewidth=6,linestyle=style,
                                            label='Max CSI')
     #sns.lineplot(data=pr_mean.sort_values('POD'),x='Success Ratio',y='POD',hue='Fold',
      #           sort=False,color='xkcd:purple',ax=ax,linewidth=4,legend=False)
     ax.set_xlim([0,1])
-    ax.legend(fontsize=14)
+    ax.legend(fontsize=17)
     ax.set_ylim([0,1])
 #
 # 10. Plot SR / POD Curves on performance diagram
@@ -350,7 +350,7 @@ def plot_PD_curves_compare_models(p_vs_r,ax,basin_sel,CSI_metric='median'):
            # print(i_model)
             CSI_fold = max_CSI_ind.xs((basin_sel,i_model)).loc[max_CSI_ind.xs((basin_sel,
                                                    i_model))['CSI']==aupd_med.loc[i_model]['CSI']]
-            pr_smoothed.xs((i_model,CSI_fold.index[0])).plot(x='Success Ratio',y='POD',color=colors[i],linewidth=4,ax=ax,
+            pr_smoothed.xs((i_model,CSI_fold.index[0])).plot(x='Success Ratio',y='POD',color=colors[i],linewidth=6,ax=ax,
                                                 linestyle='-',label=i_model)
         
     elif CSI_metric == 'min':
@@ -361,7 +361,7 @@ def plot_PD_curves_compare_models(p_vs_r,ax,basin_sel,CSI_metric='median'):
             # print(i_model)
             CSI_fold = max_CSI_ind.xs((basin_sel,i_model)).loc[max_CSI_ind.xs((basin_sel,
                                                    i_model))['CSI']==min_fold.loc[i_model]['CSI']]
-            pr_smoothed.xs((i_model,CSI_fold.index[0])).plot(x='Success Ratio',y='POD',color=colors[i],linewidth=4,ax=ax,
+            pr_smoothed.xs((i_model,CSI_fold.index[0])).plot(x='Success Ratio',y='POD',color=colors[i],linewidth=6,ax=ax,
                                                 linestyle='-',label=i_model)
     elif CSI_metric == 'max':
         min_fold = max_CSI_ind.xs(basin_sel).max(level=0)
@@ -371,12 +371,12 @@ def plot_PD_curves_compare_models(p_vs_r,ax,basin_sel,CSI_metric='median'):
            #  print(i_model)
             CSI_fold = max_CSI_ind.xs((basin_sel,i_model)).loc[max_CSI_ind.xs((basin_sel,
                                                    i_model))['CSI']==min_fold.loc[i_model]['CSI']]
-            pr_smoothed.xs((i_model,CSI_fold.index[0])).plot(x='Success Ratio',y='POD',color=colors[i],linewidth=4,ax=ax,
+            pr_smoothed.xs((i_model,CSI_fold.index[0])).plot(x='Success Ratio',y='POD',color=colors[i],linewidth=6,ax=ax,
                                                 linestyle='-',label=i_model)
     #sns.lineplot(data=pr_mean.sort_values('POD'),x='Success Ratio',y='POD',hue='Fold',
      #           sort=False,color='xkcd:purple',ax=ax,linewidth=4,legend=False)
     ax.set_xlim([0,1])
-    ax.legend(fontsize=14)
+    ax.legend(fontsize=17)
     ax.set_ylim([0,1])
 ### 11.  make_reliability_diagram:  A function to make a reliability diagram comparing our machine learning models to SHIPS-RII and the SHIPS consensus. 
 def make_reliability_diagram(ax,plot_lim,REL_DATA,basin_sel,palette,pct_range,models_skip=None):
