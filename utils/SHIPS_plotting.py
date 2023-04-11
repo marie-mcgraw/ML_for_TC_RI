@@ -379,7 +379,7 @@ def plot_PD_curves_compare_models(p_vs_r,ax,basin_sel,CSI_metric='median'):
     ax.legend(fontsize=17)
     ax.set_ylim([0,1])
 ### 11.  make_reliability_diagram:  A function to make a reliability diagram comparing our machine learning models to SHIPS-RII and the SHIPS consensus. 
-def make_reliability_diagram(ax,plot_lim,REL_DATA,basin_sel,palette,pct_range,models_skip=None):
+def make_reliability_diagram(ax,plot_lim,REL_DATA,basin_sel,palette,pct_range,models_skip=None,alpha=1):
     # Inputs:
     # ax: axes for figure
     # plot_lim: limits for reliability diagram (extends beyond 100 b/c we want to add the info about case numbers)

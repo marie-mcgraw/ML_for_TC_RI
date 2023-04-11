@@ -90,9 +90,9 @@ def create_SHIPS_predictors_IR(SHIPS_in,PREDICTORS_sel,FORE_use,IR00_time_ind,IR
                                PC00_time_ind,PC00_var_names):
     # Trim to selected predictors
     pred_sel_IR = SHIPS_in[PREDICTORS_sel]
-    case_ind = pred_sel_IR['CASE'].unique().tolist()
     # mask NaNs
     pred_sel_IR = pred_sel_IR.mask(pred_sel_IR == 9999)
+    case_ind = pred_sel_IR['CASE'].unique().tolist()
     # Now, if IR00 (PC00) is nan, replace with IRM1 (PCM1)
     pred_sel_IR.IR00.fillna(pred_sel_IR.IRM1,inplace=True)
     pred_sel_IR.PC00.fillna(pred_sel_IR.PCM1,inplace=True)
@@ -415,3 +415,13 @@ def calculate_class_weights(SHIPS,n_classes,RI_thresh=30,init_hr=0):
     class_size_pct['FRAC'] = class_size_pct/class_size_pct.sum(level=0)
     class_size_pct['WEIGHT'] = 1/class_size_pct['FRAC']
     return class_size_pct
+# 9. apply_land_mask: If desired, mask out points within a certain distance from land. Mask can be simple or complex (will add later). 
+def apply_land_mask(SHIPS,mask_type):
+    if mask_type == 'SIMPLE_MASK':
+        DTL = 100
+        print('applying mask')
+        SHIPS = SHIPS.mask(SHIPS['DTL']<=DTL).dropna(how='all')
+    else:
+        raise SyntaxError("Haven't coded this up yet")
+    return SHIPS
+        
