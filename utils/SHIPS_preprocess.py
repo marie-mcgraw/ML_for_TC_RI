@@ -15,7 +15,7 @@ import pandas as pd
 ##outputs: predictors_DYN_return is our masked, interpolated (if desired), and trimmed subset of the SHIPS data containing only our desired dynamical predictors
 def create_SHIPS_predictors_dyn(SHIPS_in,PREDICTORS_sel,predictand_name,is_INTERP,FORE_use,calc_POT=True):
     predictors_DYN = SHIPS_in[PREDICTORS_sel]
-    predictand = SHIPS_in[['CASE','NAME','DATE_full','TIME',predictand_name]]
+    predictand = SHIPS_in[['ATCFID','CASE','NAME','DATE_full','TIME',predictand_name]]
     predictand = predictand.mask(predictand == 9999)
     # Calculate POT and replace all DELV with DELV at -12
     predictors_DYN_x = predictors_DYN.set_index(['CASE','TIME'])
@@ -100,7 +100,7 @@ def create_SHIPS_predictors_IR(SHIPS_in,PREDICTORS_sel,FORE_use,IR00_time_ind,IR
     pred_sel_IR.IR00.fillna(pred_sel_IR.IRM3,inplace=True)
     pred_sel_IR.PC00.fillna(pred_sel_IR.PCM3,inplace=True)
     # Select desired variables and fill for each case at all times
-    pred_IR = pred_sel_IR[['CASE','NAME','DATE_full','TIME','TYPE']]
+    pred_IR = pred_sel_IR[['ATCFID','CASE','NAME','DATE_full','TIME','TYPE']]
     pred_IR = pred_IR.set_index(['CASE'])
     pred_sel_IR = pred_sel_IR.set_index(['CASE','TIME'])
     for i_case in case_ind:
@@ -219,11 +219,11 @@ def fore_hr_averaging(X_train,X_test,y_train,y_test,DO_AVG=True):
         y_test_o = y_test
     else:
         print('averaging hours together')
-        X_train_full = X_train.mean(level=['BASIN','CASE','NAME','DATE_full'])
-        X_test_full = X_test.mean(level=['BASIN','CASE','NAME','DATE_full'])
+        X_train_full = X_train.mean(level=['BASIN','ATCFID','CASE','NAME','DATE_full'])
+        X_test_full = X_test.mean(level=['BASIN','ATCFID','CASE','NAME','DATE_full'])
         #
-        y_train_o = y_train.mean(level=['BASIN','CASE','NAME','DATE_full'])
-        y_test_o = y_test.mean(level=['BASIN','CASE','NAME','DATE_full'])
+        y_train_o = y_train.mean(level=['BASIN','ATCFID','CASE','NAME','DATE_full'])
+        y_test_o = y_test.mean(level=['BASIN','ATCFID','CASE','NAME','DATE_full'])
         
     return X_train_full,X_test_full,y_train_o,y_test_o
 #######
@@ -298,8 +298,8 @@ def SHIPS_train_test_shuffle_CLASS(SHIPS_predictors,test_years,to_predict,is_RI_
     SHIPS_train = SHIPS_train[SHIPS_train['TIME'].isin(np.arange(0,hrs_max+1))]
     SHIPS_test = SHIPS_test[SHIPS_test['TIME'].isin(np.arange(0,hrs_max+1))]
     # 
-    SHIPS_train = SHIPS_train.set_index(['BASIN','CASE','TIME'])
-    SHIPS_test = SHIPS_test.set_index(['BASIN','CASE','TIME'])
+    SHIPS_train = SHIPS_train.set_index(['BASIN','ATCFID','CASE','TIME'])
+    SHIPS_test = SHIPS_test.set_index(['BASIN','ATCFID','CASE','TIME'])
     # Are we predicting <code>VMAX</code> or the change in <code>VMAX</code>? 
     #if to_predict == 'd_VMAX':
     diff_train = calc_d24_VMAX(SHIPS_train,0)
@@ -324,8 +324,8 @@ def SHIPS_train_test_shuffle_CLASS(SHIPS_predictors,test_years,to_predict,is_RI_
     #
     #SHIPS_test_all = SHIPS_test_all.reset_index().set_index(to_IND)
     SHIPS_test_d = SHIPS_test_all.drop(columns=to_DROP)
-    X_train = SHIPS_train_d.drop([24],axis=0,level=4)
-    X_test = SHIPS_test_d.drop([24],axis=0,level=4)
+    X_train = SHIPS_train_d.drop([24],axis=0,level='TIME')
+    X_test = SHIPS_test_d.drop([24],axis=0,level='TIME')
     # Decide on whether or not to average over all time periods
     X_train_full,X_test_full,y_train,y_test = fore_hr_averaging(X_train,X_test,y_train_f,y_test_f,DO_AVG)
     # Discard all cases for which we do not have a predictand
@@ -416,11 +416,11 @@ def calculate_class_weights(SHIPS,n_classes,RI_thresh=30,init_hr=0):
     class_size_pct['WEIGHT'] = 1/class_size_pct['FRAC']
     return class_size_pct
 # 9. apply_land_mask: If desired, mask out points within a certain distance from land. Mask can be simple or complex (will add later). 
-def apply_land_mask(SHIPS,mask_type):
+def apply_land_mask(SHIPS,mask_type,to_IND):
     if mask_type == 'SIMPLE_MASK':
         DTL = 100
         print('applying mask')
-        SHIPS = SHIPS.mask(SHIPS['DTL']<=DTL).dropna(how='all')
+        SHIPS.loc[:,~SHIPS.columns.isin(to_IND)] = SHIPS.loc[:,~SHIPS.columns.isin(to_IND)].mask(SHIPS['DTL']<=DTL)
     else:
         raise SyntaxError("Haven't coded this up yet")
     return SHIPS

@@ -1,3 +1,9 @@
+#!/usr/bin/env python
+# coding: utf-8
+
+# In[4]:
+
+
 # -*- coding: utf-8 -*-
 """SHIPS_reader_V2.ipynb
 
@@ -14,10 +20,10 @@ import os
 # from google.colab import drive
 import datetime
 # drive.mount('/content/drive')
-
-fname = 'lsdiaga_1982_2019_sat_ts.dat'
-BASIN_name = 'ATLANTIC'
-fdir_save = 'DATA/processed/'
+ext = '.dat'
+fname = '/home/mmcgraw/ML_for_TC_RI/DATA/raw_SHIPS/lsdiagw_1990_2021{ext}'.format(ext=ext)
+BASIN_name = 'WEST_PACIFIC'
+fdir_save = '../DATA/processed/'
 # Make data directory if it doesn't exist yet
 if not os.path.exists(fdir_save):
     os.makedirs(fdir_save)
@@ -31,13 +37,13 @@ Combine DATE and CASE_TIME
 
 If line is LAST, increase case_count by 1
 
-Else, other stuff
+Else, read in case contents
 """
 
 SHIPS_all = pd.DataFrame()
 chunk_count = 0
 case_count = 0
-with open(fname) as infile:
+with open(fname, mode='r', encoding='utf-8-sig') as infile:
   for line in infile:
     line_s = line.split()
     # If HEAD, keep the storm NAME and DATE/TIME
@@ -45,13 +51,16 @@ with open(fname) as infile:
       NAME = line_s[0]
       DATE = line_s[1]
       CASE_TIME = line_s[2]
+      ATCFID = line_s[7]
+      print(ATCFID)
       DATE_fm = datetime.datetime.strptime(DATE,'%y%m%d')
       DATE_full = DATE_fm + pd.DateOffset(hours=int(CASE_TIME))
-      df_new = pd.DataFrame(columns={'CASE','NAME','DATE_full'})
+      df_new = pd.DataFrame(columns={'CASE','NAME','DATE_full','ATCFID'})
     #
     elif (line_s[-1] == 'LAST'):
       df_new['NAME'] = NAME
       df_new['DATE_full'] = DATE_full
+      df_new['ATCFID'] = ATCFID
       if case_count == 0:
         df_new['CASE'] = 0
       else:
@@ -92,3 +101,10 @@ with open(fname) as infile:
         df_new[[line_s[-2]+'_AGE']] = line_s[-1]
 # 
 SHIPS_all.to_csv(fname_save)
+
+
+# In[ ]:
+
+
+
+
