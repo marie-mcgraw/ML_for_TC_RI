@@ -364,8 +364,15 @@ def get_roc_auc(X_test,basin,model,y_test,class_sel,class_label,scoring,cut='equ
     # Everything for RI only
     y_scores_RI = ypred_prob[:,class_sel]
     # Get Brier Skill Score
-    brier_loss = brier_score_loss(y_test,y_scores_RI)
+    brier_loss = [brier_score_loss(y_test_use,[y for x in range(len(y_test_use))]) for y in np.arange(0,1.01,0.1)]
     BS_ref = np.sum(y_test_use==1)/len((y_test_use))
+    #
+    brier = pd.DataFrame()
+    brier['BS'] = brier_loss
+    brier['BASIN'] = basin
+    brier['CLASS'] = class_label
+    brier['Threshold'] = np.arange(0,1.01,0.1)
+    brier['BS_ref'] = BS_ref
     #
     p, r, thresholds = precision_recall_curve(y_test_use,y_scores_RI)
     f1 = (2*p*r)/(p+r)
@@ -382,6 +389,13 @@ def get_roc_auc(X_test,basin,model,y_test,class_sel,class_label,scoring,cut='equ
             cutoff = icutoff[0][0]
         else:
             icutoff = np.where(np.round(r,1) < 1 - cut)
+            cutoff = icutoff[0][0]
+    elif scoring == "precision_weighted":
+        if cut == 'equal':
+            icutoff = np.where(r > p)
+            cutoff = icutoff[0][0]
+        else:
+            icutoff = np.where(np.round(p,1) < 1 - cut)
             cutoff = icutoff[0][0]
     elif scoring == 'f1_weighted':
         mf = p_vs_r['F1'].max()
@@ -410,7 +424,7 @@ def get_roc_auc(X_test,basin,model,y_test,class_sel,class_label,scoring,cut='equ
     roc_vals['AUC ROC Score'] = auc_roc_score
     roc_vals['BASIN'] = basin
     roc_vals['CLASS'] = class_label
-    return ypred_prob, p_vs_r, roc_vals, brier_loss, BS_ref
+    return ypred_prob, p_vs_r, roc_vals, brier
 # Calculate the area under the performance diagram curve
 def calc_AUPD(p_vs_r):
     aupd = lambda y: np.trapz(y['POD'],x=y['Success Ratio'])

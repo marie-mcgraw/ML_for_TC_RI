@@ -393,20 +393,20 @@ def make_reliability_diagram(ax,plot_lim,REL_DATA,basin_sel,palette,pct_range,mo
     ax.plot([0,plot_lim],[0,plot_lim],linewidth=3,color='xkcd:slate grey')
     # Add models--first we'll add dots for each predicted probability
     sns.scatterplot(data=REL_DATA.xs(basin_sel).reset_index().sort_values('Model'),x='Predicted Pct',y='Observed Pct',hue='Model',
-                palette=sns.set_palette(palette),ax=ax,s=150,alpha=0.9)
+                palette=sns.set_palette(palette),ax=ax,s=180,alpha=0.9)
     # Then, lines to connect dots
     sns.lineplot(data=REL_DATA.xs(basin_sel).reset_index().sort_values('Model'),x='Predicted Pct',y='Observed Pct',
-            hue='Model',palette=sns.set_palette(palette),ax=ax,linewidth=3,legend=False)
+            hue='Model',palette=sns.set_palette(palette),ax=ax,linewidth=5,legend=False)
     # Formatting
     ax.set_ylim([-0.5,plot_lim])
     ax.set_xlim([-0.5,plot_lim])
     ax.set_xticks([5,10,20,30,40,50,60,70,80,90,100])
     ax.set_yticks([5,10,20,30,40,50,60,70,80,90,100])
-    ax.tick_params(axis='y',labelsize=14)
-    ax.tick_params(axis='x',labelsize=14)
+    ax.tick_params(axis='y',labelsize=16)
+    ax.tick_params(axis='x',labelsize=16)
     ax.legend(fontsize=13,loc='lower right')
-    ax.set_xlabel('Predicted RI Probability',fontsize=17)
-    ax.set_ylabel('Observed RI Probability',fontsize=17)
+    ax.set_xlabel('Predicted RI Probability',fontsize=22)
+    ax.set_ylabel('Observed RI Probability',fontsize=22)
     # Calculate total number of observations in each predicted probability bin
     plt_nums = REL_DATA.xs(basin_sel).sort_values(['Predicted Pct']).reset_index().set_index(['Predicted Pct'])
     ax.grid()
@@ -433,5 +433,5 @@ def make_reliability_diagram(ax,plot_lim,REL_DATA,basin_sel,palette,pct_range,mo
                 # print('do not plot')
             else:
                 yval = 101+ycount*3
-                ax.text((i_pct-4 if i_pct == 5 else i_pct -2),yval,ix_mod,color=i_color,fontsize=13,weight='semibold')
+                ax.text((i_pct-4 if i_pct == 5 else i_pct -2),yval,ix_mod,color=i_color,fontsize=15,weight='semibold')
     return(ax)
