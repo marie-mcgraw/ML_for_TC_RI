@@ -44,6 +44,22 @@ We use this bootstrapping approach for several reasons:
 
 Once we complete the bootstrapped training process, we identify the best model across all 25 of our training instances, and we use those parameters to train a best-guess model using our full 2005-2018 training sample, with stratified k-means cross-validation. We test our model by predicting rapid intensification on samples from 2019 and beyond. We train three different random forest models, each of which handles the class imbalance problem in a different way, as well as a logistic regression model for a baseline. The different methods of handling class imbalance were explored as part of McGovern et al. (2024), which was a study on data bias in AI models. The trained models have been provided in the `trained_models` subdirectory. You should be able to open the files with `pickle.load(open(model_name, 'rb'))`. `Test_SHIPS_2019-2021.ipynb` and `Test_SHIPS_2019-2021.py` provide an example of evaluation on 2019-2021 data. 
 
+Note again that we've provided code to evaluate the random forest models using realtime data (`Test_realtime_SHIPS_2019-2021.ipynb`/`Test_realtime_SHIPS_2019-2021.py`), but as stated earlier those require the not-publicly-available realtime SHIPS files to run. 
+
+I haven't included the results here, as this work is in the process of being written up for publication, but I'm happy to provide figures upon request. 
+
+### Getting additional data for evaluation
+We use some additional files for evaluation--namely the best tracks, which contain the post-hoc verified forecast information about each tropical cyclone; and the e-decks, which contain the probabilistic rapid intensification forecasts. `get_best_track.py` fetches the best tracks from our local CIRA repos, while `get_edecks_2019.py` and `get_edecks_2020.py` get the e-decks from our local repos (note that the formatting of the e-decks changed between 2019 and 2020, so we have different file readers for 2019 and 2020 and beyond). Like the developmental data, these files must be read in line-by-line. 
+
+### Reliability Diagrams
+In addition to evaluating our models using classification reports, confusion matrices, precision vs recall curves, reciever-operator curves, and categorical performance diagrams, we also construct reliability diagrams to evaluate two things:
+1) How did our model perform against the existing operational statistical rapid intensification foreacsts?
+2) Did our model improve the operational consensus forecast?
+
+We provide a sample reliability diagram where we examine forecasts from 2019-2021 (below). Our model is in purple, while the existing consensus is in blue (only available in Atlantic and East Pacific). The consensus forecast that includes our ML model is in pink. On this diagram, a perfect model would be along the one to one line, so we can see that the RF-RI model improves the consensus forecast for the 2019-2021 forecasts, especially at higher probabilities of rapid intensification. 
+
+![reliability](reliability.png). 
+
 
 
 
