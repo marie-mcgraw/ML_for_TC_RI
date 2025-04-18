@@ -378,6 +378,50 @@ def plot_PD_curves_compare_models(p_vs_r,ax,basin_sel,CSI_metric='median'):
     ax.set_xlim([0,1])
     ax.legend(fontsize=17)
     ax.set_ylim([0,1])
+# 10b. Plot SR / POD Curves on performance diagram
+def plot_PD_curves_compare_basins(p_vs_r,ax,model_sel,CSI_metric='median'):
+    pr_smoothed = p_vs_r.groupby(['Model','BASIN','Fold','Thresh Round']).mean().xs(model_sel)
+    #pr_mean = pr_smoothed.groupby(['Model','Thresh Round']).mean().reset_index()
+    # Get curve for median AUPD
+    max_CSI_ind = p_vs_r.groupby(['Model','BASIN','Fold'])[['CSI','Bias']].agg({'CSI':'max'})#.xs(basin_sel)
+    colors_list = ['hot pink','navy','goldenrod','green','violet']
+    pal_sel = sns.color_palette(sns.xkcd_palette(colors_list),5)
+    if CSI_metric == 'median':
+        aupd_med = max_CSI_ind.xs(model_sel).median(level=0)
+        models_list = aupd_med.index.unique().tolist()
+        for i in np.arange(0,len(models_list)):
+            i_model = models_list[i]
+           # print(i_model)
+            CSI_fold = max_CSI_ind.xs((model_sel,i_model)).loc[max_CSI_ind.xs((model_sel,
+                                                   i_model))['CSI']==aupd_med.loc[i_model]['CSI']]
+            pr_smoothed.xs((i_model,CSI_fold.index[0])).plot(x='Success Ratio',y='POD',color=pal_sel[i],linewidth=6,ax=ax,
+                                                linestyle='-',label=i_model)
+        
+    elif CSI_metric == 'min':
+        min_fold = max_CSI_ind.xs(model_sel).min(level=0)
+        models_list = min_fold.index.unique().tolist()
+        for i in np.arange(0,len(models_list)):
+            i_model = models_list[i]
+            # print(i_model)
+            CSI_fold = max_CSI_ind.xs((model_sel,i_model)).loc[max_CSI_ind.xs((model_sel,
+                                                   i_model))['CSI']==min_fold.loc[i_model]['CSI']]
+            pr_smoothed.xs((i_model,CSI_fold.index[0])).plot(x='Success Ratio',y='POD',color=pal_sel[i],linewidth=6,ax=ax,
+                                                linestyle='-',label=i_model)
+    elif CSI_metric == 'max':
+        min_fold = max_CSI_ind.xs(model_sel).max(level=0)
+        models_list = min_fold.index.unique().tolist()
+        for i in np.arange(0,len(models_list)):
+            i_model = models_list[i]
+           #  print(i_model)
+            CSI_fold = max_CSI_ind.xs((model_sel,i_model)).loc[max_CSI_ind.xs((model_sel,
+                                                   i_model))['CSI']==min_fold.loc[i_model]['CSI']]
+            pr_smoothed.xs((i_model,CSI_fold.index[0])).plot(x='Success Ratio',y='POD',color=pal_sel[i],linewidth=6,ax=ax,
+                                                linestyle='-',label=i_model)
+    #sns.lineplot(data=pr_mean.sort_values('POD'),x='Success Ratio',y='POD',hue='Fold',
+     #           sort=False,color='xkcd:purple',ax=ax,linewidth=4,legend=False)
+    ax.set_xlim([0,1])
+    ax.legend(fontsize=17)
+    ax.set_ylim([0,1])
 ### 11.  make_reliability_diagram:  A function to make a reliability diagram comparing our machine learning models to SHIPS-RII and the SHIPS consensus. 
 def make_reliability_diagram(ax,plot_lim,REL_DATA,basin_sel,palette,pct_range,models_skip=None,alpha=1):
     # Inputs:
@@ -435,3 +479,62 @@ def make_reliability_diagram(ax,plot_lim,REL_DATA,basin_sel,palette,pct_range,mo
                 yval = 101+ycount*3
                 ax.text((i_pct-4 if i_pct == 5 else i_pct -2),yval,ix_mod,color=i_color,fontsize=15,weight='semibold')
     return(ax)
+#
+def _get_pofd_pod_grid(pofd_spacing=0.01, pod_spacing=0.01):
+    """Creates grid in POFD-POD space.
+
+    POFD = probability of false detection
+    POD = probability of detection
+
+    M = number of rows (unique POD values) in grid
+    N = number of columns (unique POFD values) in grid
+
+    :param pofd_spacing: Spacing between grid cells in adjacent columns.
+    :param pod_spacing: Spacing between grid cells in adjacent rows.
+    :return: pofd_matrix: M-by-N numpy array of POFD values.
+    :return: pod_matrix: M-by-N numpy array of POD values.
+    """
+
+    num_pofd_values = int(numpy.ceil(1. / pofd_spacing))
+    num_pod_values = int(numpy.ceil(1. / pod_spacing))
+
+    unique_pofd_values = numpy.linspace(
+        0, 1, num=num_pofd_values + 1, dtype=float
+    )
+    unique_pofd_values = unique_pofd_values[:-1] + pofd_spacing / 2
+
+    unique_pod_values = numpy.linspace(
+        0, 1, num=num_pod_values + 1, dtype=float
+    )
+    unique_pod_values = unique_pod_values[:-1] + pod_spacing / 2
+
+    return numpy.meshgrid(unique_pofd_values, unique_pod_values[::-1])
+def _get_peirce_colour_scheme():
+    """Returns colour scheme for Peirce score.
+
+    :return: colour_map_object: Colour scheme (instance of
+        `matplotlib.colors.ListedColormap`).
+    :return: colour_norm_object: Instance of `matplotlib.colors.BoundaryNorm`,
+        defining the scale of the colour map.
+    """
+
+    this_colour_map_object = pyplot.get_cmap('Blues')
+    this_colour_norm_object = matplotlib.colors.BoundaryNorm(
+        PEIRCE_SCORE_LEVELS, this_colour_map_object.N
+    )
+
+    rgba_matrix = this_colour_map_object(this_colour_norm_object(
+        PEIRCE_SCORE_LEVELS
+    ))
+    colour_list = [
+        rgba_matrix[i, ..., :-1] for i in range(rgba_matrix.shape[0])
+    ]
+
+    colour_map_object = matplotlib.colors.ListedColormap(colour_list)
+    colour_map_object.set_under(numpy.full(3, 1.))
+    colour_norm_object = matplotlib.colors.BoundaryNorm(
+        PEIRCE_SCORE_LEVELS, colour_map_object.N
+    )
+
+    return colour_map_object, colour_norm_object
+###
